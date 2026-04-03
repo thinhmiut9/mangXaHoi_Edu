@@ -1,7 +1,8 @@
 import axios, { AxiosError } from 'axios'
 
 const runtimeApiUrl = `${window.location.protocol}//${window.location.hostname}:5000`
-const API_URL = runtimeApiUrl
+const envApiUrl = import.meta.env.VITE_API_URL?.trim()
+const API_URL = (envApiUrl ? envApiUrl : runtimeApiUrl).replace(/\/+$/, '')
 
 export const apiClient = axios.create({
   baseURL: `${API_URL}/api`,

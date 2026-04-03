@@ -12,6 +12,13 @@ import { timeAgo } from '@/utils/format'
 import { useAuthStore } from '@/store/authStore'
 
 type Tag = '# UI' | '# Database' | '# Meeting'
+type GroupMember = {
+  id: string
+  name: string
+  avatar: string
+  role: string
+  roleText: string
+}
 
 function roleLabel(role: string) {
   if (role === 'OWNER') return 'Admin'
@@ -23,7 +30,7 @@ function privacyLabel(privacy?: 'PUBLIC' | 'PRIVATE') {
   return privacy === 'PRIVATE' ? 'Riêng tư' : 'Công khai'
 }
 
-function extractMembers(raw: any, ownerId?: string) {
+function extractMembers(raw: any, ownerId?: string): GroupMember[] {
   const rows = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : []
   return rows.map((row: any, index: number) => {
     const user = row?.u?.properties ?? row?.user?.properties ?? row?.user ?? row ?? {}
@@ -386,7 +393,7 @@ export default function GroupDetailPage() {
                 ) : featuredMembers.length === 0 ? (
                   <p className='text-sm text-slate-500'>Chưa có dữ liệu thành viên.</p>
                 ) : (
-                  featuredMembers.map((member) => (
+                  featuredMembers.map((member: GroupMember) => (
                     <div key={member.id} className='flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-2.5'>
                       <div className='flex items-center gap-2.5'>
                         <Avatar src={member.avatar} name={member.name} size='sm' />

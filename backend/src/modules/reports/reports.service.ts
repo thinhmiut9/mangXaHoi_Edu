@@ -35,17 +35,17 @@ export const reportsService = {
     const report = await reportsRepository.getById(id)
 
     const targetType = String(report?.target?.targetType || report?.targetType || '').toUpperCase()
-    const targetId = report?.target?.targetId || report?.targetId
-    let targetOwnerId =
+    const targetId = report?.target?.targetId || report?.targetId || undefined
+    let targetOwnerId: string | undefined =
       targetType === 'USER'
         ? targetId
-        : report?.target?.author?.userId
+        : report?.target?.author?.userId || undefined
 
     if (!targetOwnerId && targetId && targetType === 'POST') {
-      targetOwnerId = await postsRepository.getAuthorId(targetId)
+      targetOwnerId = (await postsRepository.getAuthorId(targetId)) || undefined
     }
     if (!targetOwnerId && targetId && targetType === 'COMMENT') {
-      targetOwnerId = await commentsRepository.getCommentAuthorId(targetId)
+      targetOwnerId = (await commentsRepository.getCommentAuthorId(targetId)) || undefined
     }
 
     if (payload.status === 'RESOLVED') {

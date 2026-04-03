@@ -1,7 +1,8 @@
 import { io, Socket } from 'socket.io-client'
 
 const runtimeSocketUrl = `${window.location.protocol}//${window.location.hostname}:5000`
-const SOCKET_URL = runtimeSocketUrl
+const envSocketUrl = import.meta.env.VITE_SOCKET_URL?.trim()
+const SOCKET_URL = (envSocketUrl ? envSocketUrl : runtimeSocketUrl).replace(/\/+$/, '')
 
 let socket: Socket | null = null
 
