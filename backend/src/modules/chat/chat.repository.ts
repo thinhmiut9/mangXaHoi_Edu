@@ -1,0 +1,197 @@
+import { runQuery, runQueryOne } from '../../config/neo4j'
+import { Conversation, Message, UserPublic } from '../../types'
+import { v4 as uuidv4 } from 'uuid'
+
+export const chatRepository = {
+  async existsByRef(conversationRef: string): Promise<boolean> {
+    const result = await runQueryOne<{ exists: boolean }>(
+      `MATCH (c:Conversation)
+       WHERE c.conversationId = $conversationRef OR c.directKey = $conversationRef
+       RETURN true AS exists
+       LIMIT 1`,
+      { conversationRef }
+    )
+    return !!result?.exists
+  },
+
+  async getConversations(userId: string): Promise<Conversation[]> {
+    const results = await runQuery<{
+      c: { properties: Conversation }
+      lastMessage: { properties: Message } | null
+      unread: number
+      participants: Array<Record<string, unknown>>
+    }>(
+      `MATCH (u:User {userId: $userId})-[:PARTICIPATES_IN]-(c:Conversation)
+       OPTIONAL MATCH (c)-[:PARTICIPATES_IN]-(other:User) WHERE other.userId <> $userId
+       WITH u, c, collect(other {
+         .userId, .email, .displayName, .avatarUrl, .coverUrl, .location,
+         .role, .status, .profileVisibility, .createdAt, .lastOnlineAt
+       }) AS participants
+       OPTIONAL MATCH (lm:Message)-[:IN_CONVERSATION]->(c)
+       WITH u, c, participants, lm ORDER BY lm.createdAt DESC
+       WITH u, c, participants, head(collect(lm)) AS lastMessage
+       OPTIONAL MATCH (u)-[hidden:HIDDEN_CONVERSATION]->(c)
+       WITH u, c, participants, lastMessage, coalesce(hidden.hiddenAt, hidden.at, '') AS hiddenAt
+       WHERE hiddenAt = '' OR (c.lastMessageAt IS NOT NULL AND c.lastMessageAt > hiddenAt)
+       OPTIONAL MATCH (u)-[read:READ]->(c)
+       WITH u, c, participants, lastMessage, hiddenAt, coalesce(read.at, '') AS readAt
+       WITH u, c, participants, lastMessage,
+            CASE WHEN readAt > hiddenAt THEN readAt ELSE hiddenAt END AS baseline
+       OPTIONAL MATCH (um:Message)-[:IN_CONVERSATION]->(c)<-[:SENT]-(sender:User)
+       WHERE (baseline = '' OR um.createdAt > baseline) AND sender.userId <> $userId
+       RETURN c, participants, lastMessage, count(um) AS unread
+       ORDER BY c.lastMessageAt DESC`,
+      { userId }
+    )
+    return results.map(r => ({
+      ...r.c.properties,
+      participants: (r.participants ?? []) as unknown as UserPublic[],
+      unreadCount: r.unread,
+      lastMessage: r.lastMessage?.properties,
+    }))
+  },
+
+  async findOrCreateDirect(userId: string, targetId: string): Promise<Conversation> {
+    const now = new Date().toISOString()
+    const directKey = [userId, targetId].sort().join(':')
+
+    const existing = await runQueryOne<{ c: { properties: Conversation } }>(
+      `MATCH (u:User {userId: $userId})-[:PARTICIPATES_IN]-(c:Conversation {type: 'DIRECT'})-[:PARTICIPATES_IN]-(t:User {userId: $targetId})
+       RETURN c
+       ORDER BY c.lastMessageAt DESC, c.updatedAt DESC, c.createdAt DESC
+       LIMIT 1`,
+      { userId, targetId }
+    )
+
+    if (existing?.c?.properties?.conversationId) {
+      // Normalize legacy data so future lookups can match by directKey as well.
+      await runQuery(
+        `MATCH (u:User {userId: $userId}), (t:User {userId: $targetId}), (c:Conversation {conversationId: $conversationId})
+         SET c.directKey = coalesce(c.directKey, $directKey),
+             c.updatedAt = coalesce(c.updatedAt, $now),
+             c.lastMessageAt = coalesce(c.lastMessageAt, $now)
+         MERGE (u)-[:PARTICIPATES_IN]->(c)
+         MERGE (t)-[:PARTICIPATES_IN]->(c)`,
+        {
+          userId,
+          targetId,
+          conversationId: existing.c.properties.conversationId,
+          directKey,
+          now,
+        }
+      )
+      return existing.c.properties
+    }
+
+    const created = await runQueryOne<{ c: { properties: Conversation } }>(
+      `MATCH (u:User {userId: $userId}), (t:User {userId: $targetId})
+       MERGE (c:Conversation {type: 'DIRECT', directKey: $directKey})
+       ON CREATE SET c.conversationId = $newId, c.createdAt = $now, c.updatedAt = $now, c.lastMessageAt = $now
+       MERGE (u)-[:PARTICIPATES_IN]->(c)
+       MERGE (t)-[:PARTICIPATES_IN]->(c)
+       RETURN c`,
+      { userId, targetId, directKey, newId: uuidv4(), now }
+    )
+
+    return created!.c.properties
+  },
+
+  async getMessages(conversationRef: string, userId: string, skip = 0, limit = 50): Promise<Message[]> {
+    const results = await runQuery<{ m: { properties: Message }; sender: Record<string, unknown> }>(
+      `MATCH (me:User {userId: $userId})-[:PARTICIPATES_IN]-(c:Conversation)
+       WHERE c.conversationId = $conversationRef OR c.directKey = $conversationRef
+       OPTIONAL MATCH (me)-[hidden:HIDDEN_CONVERSATION]->(c)
+       WITH c, coalesce(hidden.hiddenAt, hidden.at, '') AS hiddenAt
+       MATCH (c)<-[:IN_CONVERSATION]-(m:Message)<-[:SENT]-(u:User)
+       WHERE hiddenAt = '' OR m.createdAt > hiddenAt
+       RETURN m, u {
+         .userId, .email, .displayName, .avatarUrl, .coverUrl, .location,
+         .role, .status, .profileVisibility, .createdAt, .lastOnlineAt
+       } AS sender
+       ORDER BY m.createdAt DESC SKIP toInteger($skip) LIMIT toInteger($limit)`,
+      { conversationRef, userId, skip, limit }
+    )
+    return results.map(r => ({
+      ...r.m.properties,
+      sender: r.sender as unknown as UserPublic,
+    })).reverse()
+  },
+
+  async createMessage(data: {
+    messageId: string
+    conversationId: string
+    senderId: string
+    content: string
+    type?: string
+    mediaUrl?: string
+  }): Promise<Message> {
+    const now = new Date().toISOString()
+    const result = await runQueryOne<{ m: { properties: Message } }>(
+      `MATCH (u:User {userId: $senderId}), (c:Conversation)
+       WHERE c.conversationId = $conversationId OR c.directKey = $conversationId
+       CREATE (m:Message {
+         messageId: $messageId,
+         conversationId: $conversationId,
+         content: $content, type: $type, mediaUrl: $mediaUrl,
+         createdAt: $now
+       })<-[:SENT]-(u)
+       CREATE (m)-[:IN_CONVERSATION]->(c)
+       SET c.updatedAt = $now, c.lastMessageAt = $now
+       RETURN m`,
+      { ...data, type: data.type ?? 'TEXT', mediaUrl: data.mediaUrl ?? null, now }
+    )
+    return result!.m.properties
+  },
+
+  async markAsRead(conversationRef: string, userId: string): Promise<void> {
+    await runQuery(
+      `MATCH (u:User {userId: $userId})-[:PARTICIPATES_IN]-(c:Conversation)
+       WHERE c.conversationId = $conversationRef OR c.directKey = $conversationRef
+       MERGE (u)-[r:READ]->(c)
+       SET r.at = $at`,
+      { conversationRef, userId, at: new Date().toISOString() }
+    )
+  },
+
+  async isParticipant(conversationRef: string, userId: string): Promise<boolean> {
+    const result = await runQueryOne<{ exists: boolean }>(
+      `MATCH (u:User {userId: $userId})-[:PARTICIPATES_IN]-(c:Conversation)
+       WHERE c.conversationId = $conversationRef OR c.directKey = $conversationRef
+       RETURN true AS exists`,
+      { conversationRef, userId }
+    )
+    return !!result?.exists
+  },
+
+  async areFriends(userId: string, targetId: string): Promise<boolean> {
+    const result = await runQueryOne<{ exists: boolean }>(
+      `MATCH (u:User {userId: $userId})-[r]-(t:User {userId: $targetId})
+       WHERE type(r) IN ['FRIENDS_WITH', 'FRIEND_WITH']
+       RETURN true AS exists`,
+      { userId, targetId }
+    )
+    return !!result?.exists
+  },
+
+  async getParticipantIds(conversationRef: string): Promise<string[]> {
+    const results = await runQuery<{ userId: string }>(
+      `MATCH (u:User)-[:PARTICIPATES_IN]-(c:Conversation)
+       WHERE c.conversationId = $conversationRef OR c.directKey = $conversationRef
+       RETURN u.userId AS userId`,
+      { conversationRef }
+    )
+    return results.map(r => r.userId)
+  },
+
+  async deleteConversation(conversationRef: string, userId: string): Promise<void> {
+    await runQuery(
+      `MATCH (u:User {userId: $userId})-[:PARTICIPATES_IN]-(c:Conversation)
+       WHERE c.conversationId = $conversationRef OR c.directKey = $conversationRef
+       MERGE (u)-[hidden:HIDDEN_CONVERSATION]->(c)
+       SET hidden.hiddenAt = $now`,
+      { conversationRef, userId, now: new Date().toISOString() }
+    )
+  },
+}
+
+
