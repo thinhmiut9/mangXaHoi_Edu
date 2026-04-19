@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -22,14 +22,14 @@
   --color-primary-900: #06235a;
 
   /* App Layout Colors */
-  --color-app-bg:       #F0F2F5;
+  --color-app-bg:       #f4f6fb;
   --color-card:         #FFFFFF;
   --color-text-primary: #1C1E21;
   --color-text-secondary: #65676B;
   --color-text-muted:   #8A8D91;
-  --color-border-light: #E4E6EB;
-  --color-border-main:  #CED0D4;
-  --color-hover-bg:     #F2F2F2;
+  --color-border-light: #e8ebf2;
+  --color-border-main:  #d5dae4;
+  --color-hover-bg:     #f3f5fa;
 
   /* Semantic Colors */
   --color-success: #22c55e;
@@ -42,7 +42,7 @@
   --color-info-bg: #eff6ff;
 
   /* Typography */
-  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-family: 'Be Vietnam Pro', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-size-xs:   11px;
   --font-size-sm:   12px;
   --font-size-base: 14px;
@@ -62,20 +62,20 @@
   --spacing-8: 32px;
 
   /* Border Radius */
-  --radius-sm: 4px;
-  --radius:    8px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  --radius-sm: 6px;
+  --radius:    10px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
   --radius-full: 9999px;
 
   /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
-  --shadow:    0 1px 4px rgba(0,0,0,0.08);
-  --shadow-md: 0 2px 8px rgba(0,0,0,0.10);
-  --shadow-lg: 0 4px 16px rgba(0,0,0,0.12);
-  --shadow-xl: 0 8px 32px rgba(0,0,0,0.14);
-  --shadow-card: 0 1px 2px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow:    0 2px 8px rgba(15, 23, 42, 0.07);
+  --shadow-md: 0 8px 20px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 16px 34px rgba(15, 23, 42, 0.10);
+  --shadow-xl: 0 24px 48px rgba(15, 23, 42, 0.12);
+  --shadow-card: 0 8px 22px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.05);
 
   /* Layout */
   --topbar-height: 56px;
@@ -83,8 +83,19 @@
   --right-panel-width: 320px;
 
   /* Transitions */
-  --transition: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-slow: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition: 0.2s cubic-bezier(0.2, 0.7, 0.2, 1);
+  --transition-slow: 0.35s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+:root[data-theme='dark'] {
+  --color-app-bg:       #e9eff8;
+  --color-card:         #ffffff;
+  --color-text-primary: #172033;
+  --color-text-secondary: #43536c;
+  --color-text-muted:   #61738f;
+  --color-border-light: #d6deea;
+  --color-border-main:  #c5d0e0;
+  --color-hover-bg:     #eaf0f8;
 }
 
 @media (max-width: 767px) {
@@ -114,9 +125,17 @@ body {
   font-size: var(--font-size-base);
   color: var(--color-text-primary);
   background-color: var(--color-app-bg);
+  background-image: radial-gradient(1200px 700px at 10% -20%, #eef5ff 0%, transparent 55%),
+    radial-gradient(900px 500px at 110% 0%, #f3f8ff 0%, transparent 52%);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+:root[data-theme='dark'] body {
+  background-color: #e9eff8;
+  background-image: radial-gradient(1200px 700px at 10% -20%, #dce8f8 0%, transparent 56%),
+    radial-gradient(900px 500px at 110% 0%, #e1eafb 0%, transparent 52%);
 }
 
 #root {
@@ -133,11 +152,17 @@ button {
   font-family: inherit;
   border: none;
   background: none;
+  transition: background-color var(--transition), box-shadow var(--transition), transform var(--transition), border-color var(--transition), opacity var(--transition);
+}
+
+button:active {
+  transform: translateY(0.5px);
 }
 
 input, textarea, select {
   font-family: inherit;
   font-size: inherit;
+  transition: border-color var(--transition), box-shadow var(--transition), background-color var(--transition);
 }
 
 img {
@@ -212,6 +237,12 @@ img {
 
 .fade-in {
   animation: fadeIn 0.2s var(--transition);
+}
+
+.soft-surface {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--color-border-light);
 }
 
 /* Spin animation */

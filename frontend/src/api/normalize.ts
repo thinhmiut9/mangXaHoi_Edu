@@ -19,6 +19,9 @@ export interface FrontendUser {
   avatar?: string
   coverPhoto?: string
   location?: string
+  school?: string
+  major?: string
+  cohort?: string
   role: 'USER' | 'ADMIN'
   status: 'ACTIVE' | 'BLOCKED'
   profileVisibility?: 'PUBLIC' | 'FRIENDS' | 'PRIVATE'
@@ -77,6 +80,9 @@ export function normalizeUser(raw: any): FrontendUser {
     avatar: isCloudinaryImageUrl(avatar) ? avatar : undefined,
     coverPhoto: isCloudinaryImageUrl(coverPhoto) ? coverPhoto : undefined,
     location: raw?.location,
+    school: raw?.school,
+    major: raw?.major,
+    cohort: raw?.cohort,
     role: raw?.role ?? 'USER',
     status: raw?.status ?? 'ACTIVE',
     profileVisibility: raw?.profileVisibility,

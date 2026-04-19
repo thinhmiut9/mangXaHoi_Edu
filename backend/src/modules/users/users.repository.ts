@@ -19,19 +19,26 @@ export const usersRepository = {
     return result ? result.u.properties : null
   },
 
-  async search(query: string, limit = 10, skip = 0): Promise<UserPublic[]> {
+  async search(query: string, limit = 10, skip = 0, viewerId?: string): Promise<UserPublic[]> {
     const results = await runQuery<{ u: { properties: User } }>(
       `MATCH (u:User)
+       OPTIONAL MATCH (viewer:User {userId: $viewerId})
        WHERE u.status = 'ACTIVE' AND (
          toLower(coalesce(u.displayName, '')) CONTAINS toLower($query) OR
          toLower(coalesce(u.username, '')) CONTAINS toLower($query) OR
          toLower(coalesce(u.email, '')) CONTAINS toLower($query) OR
          toLower(coalesce(u.location, '')) CONTAINS toLower($query)
        )
+       AND ($viewerId = '' OR u.userId <> $viewerId)
+       AND (
+         $viewerId = ''
+         OR viewer IS NULL
+         OR (NOT EXISTS((viewer)-[:BLOCKED]->(u)) AND NOT EXISTS((u)-[:BLOCKED]->(viewer)))
+       )
        RETURN u
        ORDER BY u.displayName
        SKIP toInteger($skip) LIMIT toInteger($limit)`,
-      { query, limit, skip }
+      { query, limit, skip, viewerId: viewerId ?? '' }
     )
     return results.map(r => sanitizeUser(r.u.properties))
   },
@@ -79,7 +86,7 @@ export const usersRepository = {
       `MATCH (u:User {userId: $userId})
        OPTIONAL MATCH (u)-[:CREATED]->(p:Post)
        OPTIONAL MATCH (u)-[fr]-(f:User)
-       WHERE type(fr) IN ['FRIENDS_WITH', 'FRIEND_WITH']
+       WHERE type(fr) IN ['FRIENDS_WITH']
        OPTIONAL MATCH (u)-[:MEMBER_OF]->(g:Group)
        RETURN count(DISTINCT p) AS postsCount,
                count(DISTINCT f) AS friendsCount,
@@ -118,5 +125,6 @@ function sanitizeUser(user: User): UserPublic {
   const { passwordHash: _passwordHash, updatedAt: _updatedAt, ...safe } = user
   return safe
 }
+
 
 

@@ -20,6 +20,7 @@ export type NotificationType =
   | 'FRIEND_ACCEPTED'
   | 'GROUP_INVITE'
   | 'ADMIN_ACTION'
+  | 'MENTION'
 
 // ────────────────────────────────────────────
 // User (Node: User)
@@ -64,6 +65,9 @@ export interface UserPublic {
 export interface Post {
   postId: string
   content: string
+  imageUrls?: string[]
+  videoUrls?: string[]
+  documentUrls?: string[]
   mediaUrls?: string[]
   visibility: PostVisibility
   author?: UserPublic
@@ -173,6 +177,9 @@ export interface Report {
     content?: string
     name?: string
     avatarUrl?: string
+    imageUrls?: string[]
+    videoUrls?: string[]
+    documentUrls?: string[]
     mediaUrls?: string[]
     visibility?: string
     createdAt?: string

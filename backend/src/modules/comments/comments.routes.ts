@@ -7,6 +7,7 @@ import { createCommentSchema, updateCommentSchema } from './comments.schema'
 const router = Router()
 router.use(requireAuth)
 
+router.get('/post-id/:id', commentsController.getPostId)
 router.get('/:postId', commentsController.getComments)
 router.post('/:postId', validate(createCommentSchema), commentsController.createComment)
 router.put('/:id', validate(updateCommentSchema), commentsController.updateComment)

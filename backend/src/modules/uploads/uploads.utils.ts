@@ -33,6 +33,28 @@ export const uploadVideo = multer({
   },
 })
 
+export const uploadDocument = multer({
+  storage,
+  limits: { fileSize: 30 * 1024 * 1024 }, // 30MB
+  fileFilter: (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'text/plain',
+    ]
+    if (!allowedTypes.includes(file.mimetype)) {
+      cb(new AppError('Chi chap nhan file tai lieu (pdf, doc, docx, xls, xlsx, ppt, pptx, txt)', 400))
+    } else {
+      cb(null, true)
+    }
+  },
+})
+
 export async function uploadToCloudinary(
   buffer: Buffer,
   folder: string,
@@ -61,6 +83,34 @@ export async function uploadVideoToCloudinary(
   return new Promise((resolve, reject) => {
     const stream = cloudinaryV2.uploader.upload_stream(
       { folder: `edusocial/${folder}`, public_id: publicId, resource_type: 'video' },
+      (error, result) => {
+        if (error || !result) reject(error ?? new Error('Upload failed'))
+        else resolve({ url: result.secure_url, publicId: result.public_id })
+      }
+    )
+    const readable = new Readable()
+    readable.push(buffer)
+    readable.push(null)
+    readable.pipe(stream)
+  })
+}
+
+export async function uploadRawToCloudinary(
+  buffer: Buffer,
+  folder: string,
+  publicId?: string,
+  filenameOverride?: string
+): Promise<{ url: string; publicId: string }> {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinaryV2.uploader.upload_stream(
+      {
+        folder: `edusocial/${folder}`,
+        public_id: publicId,
+        resource_type: 'raw',
+        type: 'upload',
+        access_mode: 'public',
+        filename_override: filenameOverride,
+      },
       (error, result) => {
         if (error || !result) reject(error ?? new Error('Upload failed'))
         else resolve({ url: result.secure_url, publicId: result.public_id })

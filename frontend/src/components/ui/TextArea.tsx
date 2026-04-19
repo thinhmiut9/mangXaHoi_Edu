@@ -22,8 +22,8 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
           ref={ref}
           id={inputId}
           className={cn(
-            'w-full rounded-md border bg-white px-3 py-2.5 text-base text-text-primary placeholder:text-text-muted resize-none',
-            'transition-all duration-150',
+            'w-full rounded-lg border bg-white px-3 py-2.5 text-base text-text-primary placeholder:text-text-muted resize-none',
+            'transition-all duration-200',
             'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
             'disabled:opacity-50 disabled:bg-hover-bg',
             error ? 'border-error-500' : 'border-border-main',

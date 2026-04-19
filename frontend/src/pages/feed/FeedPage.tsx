@@ -1,4 +1,4 @@
-﻿import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { postsApi } from '@/api/posts'
 import { storiesApi, Story } from '@/api/stories'
@@ -13,9 +13,11 @@ import { useToast } from '@/components/ui/Toast'
 import { extractError } from '@/api/client'
 import { PostCard } from '@/components/shared/PostCard'
 import { Modal } from '@/components/ui/Modal'
+import { MentionTextarea } from '@/components/ui/MentionTextarea'
 
 function PostComposer() {
   const { user } = useAuthStore()
+  const [composerOpen, setComposerOpen] = useState(false)
   const [content, setContent] = useState('')
   const [privacy, setPrivacy] = useState<'PUBLIC' | 'FRIENDS' | 'PRIVATE'>('PUBLIC')
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
@@ -24,36 +26,52 @@ function PostComposer() {
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const isImageFile = (file: File) => file.type.startsWith('image/')
+  const isVideoFile = (file: File) => file.type.startsWith('video/')
+
   const mutation = useMutation({
     mutationFn: async () => {
-      const uploadedUrls: string[] = []
+      const imageUrls: string[] = []
+      const videoUrls: string[] = []
+      const documentUrls: string[] = []
       if (selectedFiles.length > 0) {
-        const uploaded = await Promise.all(selectedFiles.map(file => uploadsApi.uploadImage(file)))
-        uploaded.forEach(item => uploadedUrls.push(item.url))
+        const uploaded = await Promise.all(
+          selectedFiles.map(file => {
+            if (isImageFile(file)) return uploadsApi.uploadImage(file).then(item => ({ type: 'image' as const, url: item.url }))
+            if (isVideoFile(file)) return uploadsApi.uploadVideo(file).then(item => ({ type: 'video' as const, url: item.url }))
+            return uploadsApi.uploadDocument(file).then(item => ({ type: 'document' as const, url: item.url }))
+          })
+        )
+        uploaded.forEach(item => {
+          if (item.type === 'image') imageUrls.push(item.url)
+          if (item.type === 'video') videoUrls.push(item.url)
+          if (item.type === 'document') documentUrls.push(item.url)
+        })
       }
-      return postsApi.createPost({ content, privacy, images: uploadedUrls })
+      return postsApi.createPost({ content, privacy, imageUrls, videoUrls, documentUrls })
     },
     onSuccess: () => {
       setContent('')
       setSelectedFiles([])
       setImagePreviewUrls([])
+      setComposerOpen(false)
       queryClient.invalidateQueries({ queryKey: ['feed'] })
       toast.success('Đã đăng bài viết!')
     },
     onError: (err) => toast.error(extractError(err)),
   })
 
-  const onPickImages = () => fileInputRef.current?.click()
+  const onPickFiles = () => fileInputRef.current?.click()
 
-  const onImagesSelected = (e: ChangeEvent<HTMLInputElement>) => {
+  const onFilesSelected = (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
     if (!files.length) return
 
-    const merged = [...selectedFiles, ...files].slice(0, 4)
+    const merged = [...selectedFiles, ...files].slice(0, 8)
     setSelectedFiles(merged)
 
     imagePreviewUrls.forEach(url => URL.revokeObjectURL(url))
-    setImagePreviewUrls(merged.map(file => URL.createObjectURL(file)))
+    setImagePreviewUrls(merged.filter(isImageFile).map(file => URL.createObjectURL(file)))
 
     e.target.value = ''
   }
@@ -63,105 +81,158 @@ function PostComposer() {
     setSelectedFiles(nextFiles)
 
     imagePreviewUrls.forEach(url => URL.revokeObjectURL(url))
-    setImagePreviewUrls(nextFiles.map(file => URL.createObjectURL(file)))
+    setImagePreviewUrls(nextFiles.filter(isImageFile).map(file => URL.createObjectURL(file)))
   }
+  const documentFiles = selectedFiles.filter((file) => !isImageFile(file) && !isVideoFile(file))
+  const videoFiles = selectedFiles.filter((file) => isVideoFile(file))
 
   return (
-    <div className="bg-white rounded-lg shadow-card border border-border-light p-4 mb-4">
-      <div className="flex items-center gap-3 mb-3">
-        <Avatar src={user?.avatar} name={user?.displayName ?? ''} size="md" />
-        <textarea
-          value={content}
-          onChange={e => setContent(e.target.value)}
-          placeholder={`${user?.displayName} ơi, bạn đang nghĩ gì?`}
-          className="flex-1 bg-app-bg rounded-full px-4 py-2.5 text-sm resize-none border-0 focus:outline-none focus:ring-2 focus:ring-primary-300 min-h-[40px] max-h-32"
-          rows={1}
-          onInput={e => {
-            const t = e.target as HTMLTextAreaElement
-            t.style.height = 'auto'
-            t.style.height = Math.min(t.scrollHeight, 128) + 'px'
-          }}
-          aria-label="Viết bài"
-        />
-      </div>
+    <>
+      <div className="bg-white rounded-lg shadow-card border border-border-light p-4 mb-4">
+        <div className="flex items-center gap-3 mb-3">
+          <Avatar src={user?.avatar} name={user?.displayName ?? ''} size="md" />
+          <button
+            type="button"
+            onClick={() => setComposerOpen(true)}
+            className="flex-1 text-left bg-app-bg rounded-full px-4 py-2.5 text-sm text-text-secondary hover:bg-hover-bg transition-colors"
+          >
+            {`${user?.displayName} ơi, bạn đang nghĩ gì?`}
+          </button>
+        </div>
 
-      {imagePreviewUrls.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 mb-3">
-          {imagePreviewUrls.map((url, idx) => (
-            <div key={`${url}-${idx}`} className="relative rounded-lg overflow-hidden border border-border-light">
-              <img src={url} alt={`Ảnh đã chọn ${idx + 1}`} className="w-full h-28 object-cover" />
-              <button
-                className="absolute top-1 right-1 bg-black/60 text-white text-xs px-2 py-0.5 rounded"
-                onClick={() => removeImageAt(idx)}
-                aria-label="Xóa ảnh"
-              >
-                X
-              </button>
-            </div>
+        <hr className="border-border-light mb-3" />
+        <div className="flex gap-2">
+          {[
+            { icon: '📎', label: 'Ảnh/Tài liệu' },
+            { icon: '😊', label: 'Cảm xúc' },
+            { icon: '📍', label: 'Vị trí' },
+          ].map((a) => (
+            <button
+              key={a.label}
+              onClick={() => setComposerOpen(true)}
+              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg hover:bg-hover-bg transition-colors text-sm font-medium text-text-secondary"
+            >
+              <span>{a.icon}</span>
+              <span className="hidden sm:block">{a.label}</span>
+            </button>
           ))}
         </div>
-      )}
+      </div>
 
-      {(content.trim() || imagePreviewUrls.length > 0) && (
-        <>
-          <hr className="border-border-light mb-3" />
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
+      <Modal
+        open={composerOpen}
+        onClose={() => setComposerOpen(false)}
+        title="Tạo bài viết mới"
+        size="xl"
+        footer={(
+          <>
+            <Button variant="secondary" onClick={() => setComposerOpen(false)} disabled={mutation.isPending}>
+              Hủy
+            </Button>
+            <Button
+              onClick={() => mutation.mutate()}
+              loading={mutation.isPending}
+              disabled={!content.trim() || mutation.isPending}
+            >
+              Đăng
+            </Button>
+          </>
+        )}
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-border-light bg-app-bg/60 px-3 py-2.5 flex items-center gap-3">
+            <Avatar src={user?.avatar} name={user?.displayName ?? ''} size="md" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-text-primary truncate">{user?.displayName}</p>
+              <p className="text-xs text-text-secondary">Chia sẻ cập nhật với bạn bè của bạn</p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <Avatar src={user?.avatar} name={user?.displayName ?? ''} size="md" className="mt-1" />
+            <MentionTextarea
+              value={content}
+              onChange={setContent}
+              placeholder={`${user?.displayName} ơi, bạn đang nghĩ gì?`}
+              className="flex-1 min-h-[150px] bg-white rounded-2xl px-4 py-3 text-sm resize-none border border-border-light focus:outline-none focus:ring-2 focus:ring-primary-300"
+              rows={5}
+              aria-label="Viết bài"
+            />
+          </div>
+
+          <div className="rounded-2xl border border-border-light bg-white p-3">
+            <div className="flex items-center justify-between gap-2">
               <select
                 value={privacy}
                 onChange={e => setPrivacy(e.target.value as typeof privacy)}
-                className="text-sm bg-app-bg border border-border-light rounded-full px-3 py-1 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                className="text-sm bg-app-bg border border-border-light rounded-full px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-300"
                 aria-label="Quyền riêng tư"
               >
                 <option value="PUBLIC">🌍 Công khai</option>
                 <option value="FRIENDS">👥 Bạn bè</option>
                 <option value="PRIVATE">🔒 Chỉ mình tôi</option>
               </select>
-              <Button variant="secondary" size="sm" onClick={onPickImages}>Thêm ảnh</Button>
+              <Button variant="secondary" size="sm" onClick={onPickFiles}>Thêm ảnh/video/tài liệu</Button>
             </div>
-            <Button
-              onClick={() => mutation.mutate()}
-              loading={mutation.isPending}
-              disabled={!content.trim() || mutation.isPending}
-              size="sm"
-            >
-              Đăng
-            </Button>
+            {!!selectedFiles.length && (
+              <p className="mt-2 text-xs text-text-secondary">Đã chọn {selectedFiles.length} tệp</p>
+            )}
           </div>
-        </>
-      )}
 
-      {!content.trim() && imagePreviewUrls.length === 0 && (
-        <>
-          <hr className="border-border-light mb-3" />
-          <div className="flex gap-2">
-            {[
-              { icon: '📷', label: 'Ảnh/Video', onClick: onPickImages },
-              { icon: '😊', label: 'Cảm xúc' },
-              { icon: '📍', label: 'Vị trí' },
-            ].map(a => (
-              <button
-                key={a.label}
-                onClick={a.onClick}
-                className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg hover:bg-hover-bg transition-colors text-sm font-medium text-text-secondary"
-              >
-                <span>{a.icon}</span>
-                <span className="hidden sm:block">{a.label}</span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+          {imagePreviewUrls.length > 0 && (
+            <div className="grid grid-cols-2 gap-2">
+              {imagePreviewUrls.map((url, idx) => (
+                <div key={`${url}-${idx}`} className="relative rounded-xl overflow-hidden border border-border-light">
+                  <img src={url} alt={`Ảnh đã chọn ${idx + 1}`} className="w-full h-32 object-cover" />
+                  <button
+                    className="absolute top-1.5 right-1.5 bg-black/60 text-white text-xs px-2 py-0.5 rounded"
+                    onClick={() => removeImageAt(idx)}
+                    aria-label="Xóa ảnh"
+                  >
+                    X
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {videoFiles.length > 0 && (
+            <div className="space-y-1">
+              {selectedFiles.map((file, idx) => ({ file, idx })).filter(item => isVideoFile(item.file)).map(({ file, idx }) => (
+                <div key={`${file.name}-${idx}`} className="flex items-center justify-between rounded-xl border border-border-light bg-app-bg px-3 py-2">
+                  <span className="text-sm text-text-primary truncate pr-3">🎬 {file.name}</span>
+                  <button className="text-xs text-text-secondary hover:text-text-primary" onClick={() => removeImageAt(idx)} aria-label="Xóa tệp video">
+                    Xóa
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {documentFiles.length > 0 && (
+            <div className="space-y-1">
+              {selectedFiles.map((file, idx) => ({ file, idx })).filter(item => !isImageFile(item.file) && !isVideoFile(item.file)).map(({ file, idx }) => (
+                <div key={`${file.name}-${idx}`} className="flex items-center justify-between rounded-xl border border-border-light bg-app-bg px-3 py-2">
+                  <span className="text-sm text-text-primary truncate pr-3">📄 {file.name}</span>
+                  <button className="text-xs text-text-secondary hover:text-text-primary" onClick={() => removeImageAt(idx)} aria-label="Xóa tệp">
+                    Xóa
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Modal>
 
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,video/mp4,video/webm,video/quicktime,video/x-matroska,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
         multiple
         className="hidden"
-        onChange={onImagesSelected}
+        onChange={onFilesSelected}
       />
-    </div>
+    </>
   )
 }
 

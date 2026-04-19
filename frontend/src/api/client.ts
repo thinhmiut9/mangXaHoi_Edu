@@ -18,14 +18,20 @@ apiClient.interceptors.request.use(config => {
 })
 
 // Response interceptor — handle 401 globally
+// Track if we're already redirecting to avoid multiple redirects
+let isRedirectingToLogin = false
+
 apiClient.interceptors.response.use(
   res => res,
   (err: AxiosError) => {
     const status = err.response?.status
     const code = (err.response?.data as { code?: string } | undefined)?.code
-    if (status === 401 || (status === 403 && code === 'ACCOUNT_BLOCKED')) {
+    if ((status === 401 || (status === 403 && code === 'ACCOUNT_BLOCKED')) && !isRedirectingToLogin) {
+      isRedirectingToLogin = true
+      // Xóa cả auth_token lẫn Zustand persisted store để tránh vòng lặp reload
       localStorage.removeItem('auth_token')
-      window.location.href = '/login'
+      localStorage.removeItem('edusocial-auth')
+      window.location.replace('/login')
     }
     return Promise.reject(err)
   }

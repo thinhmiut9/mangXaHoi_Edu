@@ -242,6 +242,12 @@ export const uploadsApi = {
       headers: { 'Content-Type': 'multipart/form-data' }
     }).then(r => r.data.data)
   },
+  uploadDocument: (file: File) => {
+    const form = new FormData(); form.append('document', file)
+    return apiClient.post<ApiResponse<{ url: string; publicId: string }>>('/uploads/document', form, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }).then(r => r.data.data)
+  },
 }
 
 export const adminApi = {

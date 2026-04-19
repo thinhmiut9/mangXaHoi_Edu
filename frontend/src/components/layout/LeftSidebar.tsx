@@ -15,6 +15,15 @@ const iconClass = 'h-[22px] w-[22px]'
 
 const items: Item[] = [
   {
+    to: '/',
+    label: 'Trang chủ',
+    icon: (
+      <svg className={iconClass} viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.8'>
+        <path d='M3 10.5 12 3l9 7.5v9.5a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1v-9.5Z' />
+      </svg>
+    ),
+  },
+  {
     to: '/friends',
     label: 'Bạn bè',
     icon: (
@@ -100,7 +109,7 @@ export function LeftSidebar() {
 
       <div className='space-y-1'>
         {navItems.map((item) => {
-          const isActive = location.pathname.startsWith(item.to)
+          const isActive = item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to)
           return (
             <Link
               key={item.to}

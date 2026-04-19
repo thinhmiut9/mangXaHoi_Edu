@@ -11,22 +11,50 @@ export const postsRepository = {
     groupId?: string
   }): Promise<Post> {
     const now = new Date().toISOString()
+    const mediaUrls = data.mediaUrls ?? []
     const result = await runQueryOne<{ p: { properties: Post } }>(
       `MATCH (u:User {userId: $authorId})
        CREATE (p:Post {
-         postId: $postId, content: $content, mediaUrls: $mediaUrls,
+         postId: $postId, content: $content,
+         mediaUrls: $mediaUrls,
          visibility: $visibility, groupId: $groupId, createdAt: $now, updatedAt: $now
        })<-[:CREATED]-(u)
        RETURN p`,
-      { ...data, groupId: data.groupId ?? null, mediaUrls: data.mediaUrls ?? [], now }
+      { ...data, groupId: data.groupId ?? null, mediaUrls, now }
     )
     return result!.p.properties
+  },
+
+  async attachDocuments(postId: string, userId: string, documentUrls: string[]): Promise<void> {
+    if (!documentUrls.length) return
+    const now = new Date().toISOString()
+    await runQuery(
+      `MATCH (p:Post {postId: $postId})
+       MATCH (u:User {userId: $userId})
+       UNWIND $documentUrls AS fileUrl
+       WITH p, u, fileUrl, $now AS now,
+            coalesce(last(split(split(fileUrl, '?')[0], '/')), 'document') AS fileName,
+            toLower(coalesce(last(split(fileUrl, '.')), 'file')) AS ext
+       CREATE (d:Document {
+         documentId: randomUUID(),
+         title: fileName,
+         fileName: fileName,
+         fileUrl: fileUrl,
+         fileType: split(ext, '?')[0],
+         createdAt: now,
+         updatedAt: now
+       })
+       MERGE (u)-[:UPLOADED_DOCUMENT]->(d)
+       MERGE (p)-[:HAS_DOCUMENT]->(d)`,
+      { postId, userId, documentUrls, now }
+    )
   },
 
   async findById(postId: string, viewerId?: string): Promise<Post | null> {
     const result = await runQueryOne<{
       p: { properties: Post }
       author: { properties: Record<string, unknown> }
+      documentUrls: string[]
       groupName: string | null
       groupCoverUrl: string | null
       isLiked: boolean
@@ -39,8 +67,13 @@ export const postsRepository = {
       `MATCH (p:Post {postId: $postId})<-[:CREATED]-(u:User)
        OPTIONAL MATCH (g:Group {groupId: p.groupId})
        OPTIONAL MATCH (viewer:User {userId: $viewerId})
+       WITH p, u, g, viewer
+       WHERE viewer IS NULL OR (
+         NOT EXISTS((viewer)-[:BLOCKED]->(u)) AND NOT EXISTS((u)-[:BLOCKED]->(viewer))
+       )
        RETURN p,
                u AS author,
+               [(p)-[:HAS_DOCUMENT]->(d:Document) | d.fileUrl] AS documentUrls,
                g.name AS groupName,
                g.coverUrl AS groupCoverUrl,
                EXISTS((viewer)-[:LIKED]->(p)) AS isLiked,
@@ -54,6 +87,7 @@ export const postsRepository = {
     if (!result) return null
     return {
       ...result.p.properties,
+      documentUrls: result.documentUrls,
       author: result.author.properties as unknown as UserPublic,
       groupName: result.groupName ?? undefined,
       groupCoverUrl: result.groupCoverUrl ?? undefined,
@@ -70,6 +104,7 @@ export const postsRepository = {
     const results = await runQuery<{
       p: { properties: Post }
       author: { properties: Record<string, unknown> }
+      documentUrls: string[]
       groupName: string | null
       groupCoverUrl: string | null
       isLiked: boolean
@@ -83,18 +118,31 @@ export const postsRepository = {
        MATCH (p:Post)<-[:CREATED]-(u:User)
        OPTIONAL MATCH (g:Group {groupId: p.groupId})
        WITH viewer, p, u, g, coalesce(p.visibility, p.privacy, 'PUBLIC') AS postVisibility
-       WHERE (
+      WHERE (
+         NOT EXISTS((viewer)-[:BLOCKED]->(u))
+         AND NOT EXISTS((u)-[:BLOCKED]->(viewer))
+       )
+       AND (
          u.userId = $viewerId OR
          (
            postVisibility IN ['PUBLIC', 'FRIENDS'] AND
            EXISTS {
              MATCH (viewer)-[fr]-(u)
-             WHERE type(fr) IN ['FRIENDS_WITH', 'FRIEND_WITH']
+             WHERE type(fr) IN ['FRIENDS_WITH']
            }
-         )
+         ) OR (
+           postVisibility = 'GROUP'
+           AND p.groupId IS NOT NULL
+           AND p.groupId <> ''
+           AND p.groupId <> 'null'
+           AND EXISTS {
+             MATCH (viewer)-[:MEMBER_OF]->(:Group {groupId: p.groupId})
+           }
+          )
        )
        RETURN p,
                u AS author,
+               [(p)-[:HAS_DOCUMENT]->(d:Document) | d.fileUrl] AS documentUrls,
                g.name AS groupName,
                g.coverUrl AS groupCoverUrl,
                EXISTS((viewer)-[:LIKED]->(p)) AS isLiked,
@@ -109,6 +157,7 @@ export const postsRepository = {
     )
     return results.map(r => ({
       ...r.p.properties,
+      documentUrls: r.documentUrls,
       author: r.author.properties as unknown as UserPublic,
       groupName: r.groupName ?? undefined,
       groupCoverUrl: r.groupCoverUrl ?? undefined,
@@ -126,15 +175,27 @@ export const postsRepository = {
       `MATCH (viewer:User {userId: $viewerId})
        MATCH (p:Post)<-[:CREATED]-(u:User)
        WITH viewer, p, u, coalesce(p.visibility, p.privacy, 'PUBLIC') AS postVisibility
-       WHERE (
+      WHERE (
+         NOT EXISTS((viewer)-[:BLOCKED]->(u))
+         AND NOT EXISTS((u)-[:BLOCKED]->(viewer))
+       )
+       AND (
          u.userId = $viewerId OR
          (
            postVisibility IN ['PUBLIC', 'FRIENDS'] AND
            EXISTS {
              MATCH (viewer)-[fr]-(u)
-             WHERE type(fr) IN ['FRIENDS_WITH', 'FRIEND_WITH']
+             WHERE type(fr) IN ['FRIENDS_WITH']
            }
-         )
+         ) OR (
+           postVisibility = 'GROUP'
+           AND p.groupId IS NOT NULL
+           AND p.groupId <> ''
+           AND p.groupId <> 'null'
+           AND EXISTS {
+             MATCH (viewer)-[:MEMBER_OF]->(:Group {groupId: p.groupId})
+           }
+          )
        )
        RETURN count(p) AS total`,
       { viewerId }
@@ -146,6 +207,7 @@ export const postsRepository = {
     const results = await runQuery<{
       p: { properties: Post }
       author: { properties: Record<string, unknown> }
+      documentUrls: string[]
       groupName: string | null
       groupCoverUrl: string | null
       isLiked: boolean
@@ -159,18 +221,21 @@ export const postsRepository = {
        MATCH (viewer:User {userId: $viewerId})
        OPTIONAL MATCH (g:Group {groupId: p.groupId})
        WITH u, p, viewer, g, coalesce(p.visibility, p.privacy, 'PUBLIC') AS postVisibility
-       WHERE (p.groupId IS NULL OR p.groupId = '' OR p.groupId = 'null')
+       WHERE NOT EXISTS((viewer)-[:BLOCKED]->(u))
+         AND NOT EXISTS((u)-[:BLOCKED]->(viewer))
+         AND (p.groupId IS NULL OR p.groupId = '' OR p.groupId = 'null')
          AND postVisibility <> 'GROUP'
          AND (
               postVisibility = 'PUBLIC'
           OR (postVisibility = 'FRIENDS' AND EXISTS {
                MATCH (viewer)-[fr]-(u)
-               WHERE type(fr) IN ['FRIENDS_WITH', 'FRIEND_WITH']
+               WHERE type(fr) IN ['FRIENDS_WITH']
              })
           OR $userId = $viewerId
          )
         RETURN p,
                u AS author,
+               [(p)-[:HAS_DOCUMENT]->(d:Document) | d.fileUrl] AS documentUrls,
                g.name AS groupName,
                g.coverUrl AS groupCoverUrl,
                EXISTS((viewer)-[:LIKED]->(p)) AS isLiked,
@@ -185,6 +250,7 @@ export const postsRepository = {
     )
     return results.map(r => ({
       ...r.p.properties,
+      documentUrls: r.documentUrls,
       author: r.author.properties as unknown as UserPublic,
       groupName: r.groupName ?? undefined,
       groupCoverUrl: r.groupCoverUrl ?? undefined,
@@ -201,6 +267,7 @@ export const postsRepository = {
     const results = await runQuery<{
       p: { properties: Post }
       author: { properties: Record<string, unknown> }
+      documentUrls: string[]
       groupName: string | null
       groupCoverUrl: string | null
       isLiked: boolean
@@ -213,8 +280,11 @@ export const postsRepository = {
       `MATCH (viewer:User {userId: $viewerId})-[:MEMBER_OF]->(g:Group {groupId: $groupId})
        MATCH (u:User)-[:CREATED]->(p:Post)
        WHERE p.groupId = $groupId AND p.visibility = 'GROUP'
+         AND NOT EXISTS((viewer)-[:BLOCKED]->(u))
+         AND NOT EXISTS((u)-[:BLOCKED]->(viewer))
        RETURN p,
               u AS author,
+              [(p)-[:HAS_DOCUMENT]->(d:Document) | d.fileUrl] AS documentUrls,
               g.name AS groupName,
               g.coverUrl AS groupCoverUrl,
               EXISTS((viewer)-[:LIKED]->(p)) AS isLiked,
@@ -230,6 +300,7 @@ export const postsRepository = {
 
     return results.map(r => ({
       ...r.p.properties,
+      documentUrls: r.documentUrls,
       author: r.author.properties as unknown as UserPublic,
       groupName: r.groupName ?? undefined,
       groupCoverUrl: r.groupCoverUrl ?? undefined,
@@ -242,7 +313,14 @@ export const postsRepository = {
     }))
   },
 
-  async update(postId: string, data: { content?: string; mediaUrls?: string[]; visibility?: string }): Promise<Post | null> {
+  async update(
+    postId: string,
+    data: {
+      content?: string
+      mediaUrls?: string[]
+      visibility?: string
+    }
+  ): Promise<Post | null> {
     const now = new Date().toISOString()
     const setClauses = Object.entries(data)
       .filter(([, v]) => v !== undefined)
@@ -262,6 +340,26 @@ export const postsRepository = {
        WHERE p.postId = $postId OR p.id = $postId
        DETACH DELETE p`,
       { postId }
+    )
+  },
+
+  async getMediaUrls(postId: string): Promise<string[]> {
+    const result = await runQueryOne<{
+      mediaUrls: string[] | null
+      documentUrls: string[] | null
+    }>(
+      `MATCH (p:Post)
+       WHERE p.postId = $postId OR p.id = $postId
+       RETURN p.mediaUrls AS mediaUrls, [(p)-[:HAS_DOCUMENT]->(d:Document) | d.fileUrl] AS documentUrls`,
+      { postId }
+    )
+
+    const values = [
+      ...(Array.isArray(result?.mediaUrls) ? result.mediaUrls : []),
+      ...(Array.isArray(result?.documentUrls) ? result.documentUrls : []),
+    ]
+    return Array.from(
+      new Set(values.filter((url): url is string => typeof url === 'string' && url.trim().length > 0))
     )
   },
 
@@ -310,15 +408,28 @@ export const postsRepository = {
     return result ?? { saved: false }
   },
 
-  async sharePost(postId: string, userId: string): Promise<{ shared: boolean; sharesCount: number }> {
+  async sharePost(postId: string, userId: string, sharedPostId: string): Promise<{ shared: boolean; sharesCount: number }> {
     const result = await runQueryOne<{ shared: boolean; sharesCount: number }>(
-      `MATCH (u:User {userId: $userId}), (p:Post {postId: $postId})
+      `MATCH (u:User {userId: $userId})
+       MATCH (:User)-[:CREATED]->(p:Post {postId: $postId})
        WITH u, p, EXISTS((u)-[:SHARED]->(p)) AS alreadyShared
        FOREACH (_ IN CASE WHEN NOT alreadyShared THEN [1] ELSE [] END |
-         MERGE (u)-[:SHARED {createdAt: $now}]->(p)
+         CREATE (sp:Post {
+           postId: $sharedPostId,
+           content: p.content,
+           mediaUrls: coalesce(p.mediaUrls, []),
+           visibility: coalesce(p.visibility, p.privacy, 'PUBLIC'),
+           groupId: null,
+           sharedFromPostId: p.postId,
+           createdAt: $now,
+           updatedAt: $now
+         })
+         CREATE (u)-[:CREATED]->(sp)
+         MERGE (u)-[s:SHARED]->(p)
+         ON CREATE SET s.createdAt = $now
        )
        RETURN NOT alreadyShared AS shared, COUNT { ()-[:SHARED]->(p) } AS sharesCount`,
-      { postId, userId, now: new Date().toISOString() }
+      { postId, userId, sharedPostId, now: new Date().toISOString() }
     )
     return result ?? { shared: false, sharesCount: 0 }
   },
@@ -327,17 +438,19 @@ export const postsRepository = {
     const results = await runQuery<{
       p: { properties: Post }
       author: { properties: Record<string, unknown> }
+      documentUrls: string[]
       groupName: string | null
       groupCoverUrl: string | null
     }>(
       `MATCH (u:User {userId: $userId})-[:SAVED]->(p:Post)<-[:CREATED]-(author:User)
        OPTIONAL MATCH (g:Group {groupId: p.groupId})
-       RETURN p, author, g.name AS groupName, g.coverUrl AS groupCoverUrl
+       RETURN p, author, [(p)-[:HAS_DOCUMENT]->(d:Document) | d.fileUrl] AS documentUrls, g.name AS groupName, g.coverUrl AS groupCoverUrl
        ORDER BY p.createdAt DESC SKIP toInteger($skip) LIMIT toInteger($limit)`,
       { userId, skip, limit }
     )
     return results.map(r => ({
       ...r.p.properties,
+      documentUrls: r.documentUrls,
       author: r.author.properties as unknown as UserPublic,
       groupName: r.groupName ?? undefined,
       groupCoverUrl: r.groupCoverUrl ?? undefined,
@@ -374,6 +487,7 @@ export const postsRepository = {
     const results = await runQuery<{
       p: { properties: Post }
       author: { properties: Record<string, unknown> }
+      documentUrls: string[]
       groupName: string | null
       groupCoverUrl: string | null
       isLiked: boolean
@@ -387,14 +501,16 @@ export const postsRepository = {
        MATCH (p:Post)<-[:CREATED]-(u:User)
        OPTIONAL MATCH (g:Group {groupId: p.groupId})
        WITH viewer, p, u, g, coalesce(p.visibility, p.privacy, 'PUBLIC') AS postVisibility
-       WHERE toLower(coalesce(p.content, '')) CONTAINS toLower($keyword)
+      WHERE toLower(coalesce(p.content, '')) CONTAINS toLower($keyword)
+        AND NOT EXISTS((viewer)-[:BLOCKED]->(u))
+        AND NOT EXISTS((u)-[:BLOCKED]->(viewer))
          AND (
            u.userId = $viewerId
            OR (
              postVisibility IN ['PUBLIC', 'FRIENDS']
              AND EXISTS {
                MATCH (viewer)-[fr]-(u)
-               WHERE type(fr) IN ['FRIENDS_WITH', 'FRIEND_WITH']
+               WHERE type(fr) IN ['FRIENDS_WITH']
              }
            )
            OR (
@@ -409,6 +525,7 @@ export const postsRepository = {
          )
        RETURN p,
               u AS author,
+              [(p)-[:HAS_DOCUMENT]->(d:Document) | d.fileUrl] AS documentUrls,
               g.name AS groupName,
               g.coverUrl AS groupCoverUrl,
               EXISTS((viewer)-[:LIKED]->(p)) AS isLiked,
@@ -424,6 +541,7 @@ export const postsRepository = {
 
     return results.map(r => ({
       ...r.p.properties,
+      documentUrls: r.documentUrls,
       author: r.author.properties as unknown as UserPublic,
       groupName: r.groupName ?? undefined,
       groupCoverUrl: r.groupCoverUrl ?? undefined,
@@ -436,5 +554,6 @@ export const postsRepository = {
     }))
   },
 }
+
 
 

@@ -129,12 +129,13 @@ export const chatRepository = {
     const result = await runQueryOne<{ m: { properties: Message } }>(
       `MATCH (u:User {userId: $senderId}), (c:Conversation)
        WHERE c.conversationId = $conversationId OR c.directKey = $conversationId
+       MERGE (u)-[:PARTICIPATES_IN]-(c)
        CREATE (m:Message {
          messageId: $messageId,
          conversationId: $conversationId,
          content: $content, type: $type, mediaUrl: $mediaUrl,
          createdAt: $now
-       })<-[:SENT]-(u)
+       })<-[:SENT {createdAt: $now}]-(u)
        CREATE (m)-[:IN_CONVERSATION]->(c)
        SET c.updatedAt = $now, c.lastMessageAt = $now
        RETURN m`,
@@ -166,7 +167,7 @@ export const chatRepository = {
   async areFriends(userId: string, targetId: string): Promise<boolean> {
     const result = await runQueryOne<{ exists: boolean }>(
       `MATCH (u:User {userId: $userId})-[r]-(t:User {userId: $targetId})
-       WHERE type(r) IN ['FRIENDS_WITH', 'FRIEND_WITH']
+       WHERE type(r) IN ['FRIENDS_WITH']
        RETURN true AS exists`,
       { userId, targetId }
     )
@@ -193,5 +194,6 @@ export const chatRepository = {
     )
   },
 }
+
 
 

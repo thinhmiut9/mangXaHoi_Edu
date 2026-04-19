@@ -1,4 +1,4 @@
-﻿import { usersRepository } from './users.repository'
+import { usersRepository } from './users.repository'
 import { AppError } from '../../middleware/errorHandler'
 import { UpdateProfileDto } from './users.schema'
 import { paginationMeta } from '../../utils/response'
@@ -6,7 +6,12 @@ import { UserPublic } from '../../types'
 import { friendsRepository } from '../friends/friends.repository'
 import { postsRepository } from '../posts/posts.repository'
 import { groupsRepository } from '../groups/groups.repository'
-import { filterCloudinaryImageUrls } from '../../utils/cloudinary'
+import {
+  filterCloudinaryImageUrls,
+  filterCloudinaryMediaUrls,
+  filterCloudinaryRawUrls,
+  filterCloudinaryVideoUrls,
+} from '../../utils/cloudinary'
 
 function normalizeForSearch(value: string): string {
   return value
@@ -71,6 +76,12 @@ export const usersService = {
     if (!user || user.status === 'BLOCKED') {
       throw new AppError('Người dùng không tồn tại', 404, 'USER_NOT_FOUND')
     }
+    if (viewerId && viewerId !== userId) {
+      const blocked = await friendsRepository.isBlockedBetween(viewerId, userId)
+      if (blocked) {
+        throw new AppError('Người dùng không tồn tại', 404, 'USER_NOT_FOUND')
+      }
+    }
     const stats = await usersRepository.getStats(userId)
     const isOwnProfile = viewerId === userId
     return { ...sanitizeUser(user), ...stats, isOwnProfile }
@@ -80,6 +91,12 @@ export const usersService = {
     const user = await usersRepository.findByUsername(username)
     if (!user || user.status === 'BLOCKED') {
       throw new AppError('Người dùng không tồn tại', 404, 'USER_NOT_FOUND')
+    }
+    if (viewerId && viewerId !== user.userId) {
+      const blocked = await friendsRepository.isBlockedBetween(viewerId, user.userId)
+      if (blocked) {
+        throw new AppError('Người dùng không tồn tại', 404, 'USER_NOT_FOUND')
+      }
     }
     const stats = await usersRepository.getStats(user.userId)
     const isOwnProfile = viewerId === user.userId
@@ -97,16 +114,21 @@ export const usersService = {
     if (!user || user.status === 'BLOCKED') {
       throw new AppError('Người dùng không tồn tại', 404, 'USER_NOT_FOUND')
     }
-    void viewerId
+    if (viewerId && viewerId !== userId) {
+      const blocked = await friendsRepository.isBlockedBetween(viewerId, userId)
+      if (blocked) {
+        throw new AppError('Người dùng không tồn tại', 404, 'USER_NOT_FOUND')
+      }
+    }
     return friendsRepository.getFriends(userId, 0, 300)
   },
 
-  async searchUsers(q: string, page: number, limit: number) {
+  async searchUsers(viewerId: string, q: string, page: number, limit: number) {
     const keyword = q.trim()
     if (!keyword) return { users: [], meta: paginationMeta(page, limit, 0) }
 
     const keywordNorm = normalizeForSearch(keyword)
-    const candidates = await usersRepository.search('', 500, 0)
+    const candidates = await usersRepository.search('', 500, 0, viewerId)
 
     const ranked = candidates
       .map(user => ({ user, score: scoreUser(user, keywordNorm) }))
@@ -122,7 +144,7 @@ export const usersService = {
     const keyword = q.trim()
     if (!keyword) return { users: [], posts: [], groups: [] }
 
-    const userSearch = usersService.searchUsers(keyword, 1, limit)
+    const userSearch = usersService.searchUsers(viewerId, keyword, 1, limit)
     const postSearch = postsRepository.searchVisiblePosts(viewerId, keyword, limit)
     const groupSearch = groupsRepository.searchVisibleGroups(viewerId, keyword, limit)
 
@@ -130,12 +152,38 @@ export const usersService = {
 
     return {
       users: usersResult.users,
-      posts: posts.map((post) => ({
-        ...post,
-        mediaUrls: filterCloudinaryImageUrls(post.mediaUrls),
-      })),
+      posts: posts.map((post) => {
+        const imageUrls = filterCloudinaryImageUrls(post.imageUrls)
+        const videoUrls = filterCloudinaryVideoUrls(post.videoUrls)
+        const documentUrls = filterCloudinaryRawUrls(post.documentUrls)
+        const legacyMedia = filterCloudinaryMediaUrls(post.mediaUrls)
+        return {
+          ...post,
+          imageUrls,
+          videoUrls,
+          documentUrls,
+          mediaUrls: [...new Set([...imageUrls, ...videoUrls, ...legacyMedia])],
+        }
+      }),
       groups,
     }
+  },
+
+  async mentionSearch(viewerId: string, q: string, limit = 8) {
+    const keyword = q.trim()
+    if (!keyword) return []
+    const keywordNorm = normalizeForSearch(keyword)
+    const candidates = await usersRepository.search('', Math.min(limit * 5, 100), 0, viewerId)
+    return candidates
+      .map(user => ({ user, score: scoreUser(user, keywordNorm) }))
+      .filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map(item => ({
+        userId: item.user.userId,
+        displayName: item.user.displayName,
+        avatarUrl: item.user.avatarUrl,
+      }))
   },
 }
 

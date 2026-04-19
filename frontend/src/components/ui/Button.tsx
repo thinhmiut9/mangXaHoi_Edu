@@ -15,17 +15,17 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary:   'bg-primary-500 text-white hover:bg-primary-600 active:bg-primary-700 shadow-sm',
-  secondary: 'bg-[#E4E6EB] text-text-primary hover:bg-[#D8DADF] active:bg-[#CED0D4]',
+  primary:   'bg-primary-500 text-white hover:bg-primary-600 active:bg-primary-700 shadow-sm hover:shadow-md',
+  secondary: 'bg-[#EAEFF7] text-text-primary hover:bg-[#dfe6f1] active:bg-[#d4dce8]',
   ghost:     'text-text-primary hover:bg-hover-bg active:bg-border-light',
-  danger:    'bg-error-500 text-white hover:bg-error-600 active:bg-red-700',
-  outline:   'border border-border-main text-text-primary hover:bg-hover-bg',
+  danger:    'bg-error-500 text-white hover:bg-error-600 active:bg-red-700 shadow-sm hover:shadow-md',
+  outline:   'border border-border-main text-text-primary hover:bg-hover-bg bg-white',
 }
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'h-8 px-3 text-sm font-medium rounded',
-  md: 'h-9 px-4 text-base font-semibold rounded-md',
-  lg: 'h-11 px-6 text-lg font-semibold rounded-lg',
+  sm: 'h-8 px-3 text-sm font-medium rounded-md',
+  md: 'h-10 px-4 text-base font-semibold rounded-lg',
+  lg: 'h-11 px-6 text-lg font-semibold rounded-xl',
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -35,7 +35,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         disabled={disabled || loading}
         className={cn(
-          'inline-flex items-center justify-center gap-2 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1 disabled:opacity-50 disabled:pointer-events-none select-none whitespace-nowrap',
+          'inline-flex items-center justify-center gap-2 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1 disabled:opacity-50 disabled:pointer-events-none select-none whitespace-nowrap',
           variantClasses[variant],
           sizeClasses[size],
           fullWidth && 'w-full',

@@ -46,7 +46,10 @@ export const storiesRepository = {
        })
        CREATE (u)-[:CREATED_STORY {createdAt: $createdAt}]->(s)
        RETURN s, u AS author`,
-      data
+      {
+        ...data,
+        content: data.content ?? '',
+      }
     )
 
     return {
@@ -63,7 +66,7 @@ export const storiesRepository = {
     }>(
       `MATCH (viewer:User {userId: $viewerId})
        OPTIONAL MATCH (viewer)-[fr]-(friend:User)
-       WHERE type(fr) IN ['FRIENDS_WITH', 'FRIEND_WITH']
+       WHERE type(fr) IN ['FRIENDS_WITH']
        WITH viewer, collect(friend.userId) + [viewer.userId] AS visibleUserIds
        MATCH (author:User)-[:CREATED_STORY]->(s:Story)
        WHERE author.userId IN visibleUserIds
@@ -97,7 +100,7 @@ export const storiesRepository = {
            author.userId = $viewerId OR
            EXISTS {
              MATCH (viewer)-[fr]-(author)
-             WHERE type(fr) IN ['FRIENDS_WITH', 'FRIEND_WITH']
+             WHERE type(fr) IN ['FRIENDS_WITH']
            }
          )
        RETURN s,
@@ -143,3 +146,4 @@ export const storiesRepository = {
     }))
   },
 }
+

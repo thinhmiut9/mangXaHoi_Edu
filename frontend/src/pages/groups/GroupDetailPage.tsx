@@ -1,15 +1,16 @@
-﻿import { useMemo, useState } from 'react'
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { groupsApi, uploadsApi } from '@/api/index'
 import { Post, postsApi } from '@/api/posts'
 import { Button } from '@/components/ui/Button'
 import { Avatar } from '@/components/ui/Avatar'
+import { PostCard } from '@/components/shared/PostCard'
 import { PostSkeleton } from '@/components/ui/Skeleton'
 import { useToast } from '@/components/ui/Toast'
 import { extractError } from '@/api/client'
-import { timeAgo } from '@/utils/format'
 import { useAuthStore } from '@/store/authStore'
+import { Modal } from '@/components/ui/Modal'
 
 type Tag = '# UI' | '# Database' | '# Meeting'
 type GroupMember = {
@@ -49,11 +50,13 @@ function extractMembers(raw: any, ownerId?: string): GroupMember[] {
 function deriveFiles(posts: Post[]) {
   const items: Array<{ id: string; name: string; size: string; url: string }> = []
   posts.forEach((post) => {
-    ;(post.images ?? []).forEach((url, idx) => {
+    ;(post.documentUrls ?? []).forEach((url, idx) => {
+      const noQuery = url.split('?')[0]
+      const name = noQuery.split('/').pop() || `Tài liệu #${idx + 1}`
       items.push({
         id: `${post.id}-${idx}`,
-        name: `Tệp từ bài viết #${post.id.slice(0, 6)} (${idx + 1})`,
-        size: 'Ảnh đính kèm',
+        name,
+        size: 'Tài liệu đính kèm',
         url,
       })
     })
@@ -68,22 +71,29 @@ export default function GroupDetailPage() {
   const queryClient = useQueryClient()
 
   const [content, setContent] = useState('')
+  const [composerOpen, setComposerOpen] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const isImageFile = (file: File) => file.type.startsWith('image/')
+  const isVideoFile = (file: File) => file.type.startsWith('video/')
+
+  useEffect(() => {
+    return () => {
+      imagePreviewUrls.forEach((url) => URL.revokeObjectURL(url))
+    }
+  }, [imagePreviewUrls])
 
   const groupQuery = useQuery({
     queryKey: ['group', id],
     queryFn: () => groupsApi.getGroup(id),
     enabled: !!id,
-    refetchInterval: 5000,
-    refetchIntervalInBackground: true,
   })
 
   const membersQuery = useQuery({
     queryKey: ['group-members', id],
     queryFn: () => groupsApi.getMembers(id),
     enabled: !!id,
-    refetchInterval: 7000,
-    refetchIntervalInBackground: true,
   })
 
   const postsQuery = useInfiniteQuery({
@@ -99,22 +109,39 @@ export default function GroupDetailPage() {
       const trimmed = content.trim()
       if (!trimmed) throw new Error('Nội dung thảo luận không được để trống')
 
-      let images: string[] | undefined
+      const imageUrls: string[] = []
+      const videoUrls: string[] = []
+      const documentUrls: string[] = []
       if (selectedFiles.length) {
-        const uploaded = await Promise.all(selectedFiles.map((file) => uploadsApi.uploadImage(file)))
-        images = uploaded.map((item) => item.url)
+        const uploaded = await Promise.all(
+          selectedFiles.map((file) => {
+            if (isImageFile(file)) return uploadsApi.uploadImage(file).then(item => ({ type: 'image' as const, url: item.url }))
+            if (isVideoFile(file)) return uploadsApi.uploadVideo(file).then(item => ({ type: 'video' as const, url: item.url }))
+            return uploadsApi.uploadDocument(file).then(item => ({ type: 'document' as const, url: item.url }))
+          })
+        )
+        uploaded.forEach((item) => {
+          if (item.type === 'image') imageUrls.push(item.url)
+          if (item.type === 'video') videoUrls.push(item.url)
+          if (item.type === 'document') documentUrls.push(item.url)
+        })
       }
 
       return postsApi.createPost({
         content: trimmed,
-        images,
+        imageUrls,
+        videoUrls,
+        documentUrls,
         privacy: 'GROUP',
         groupId: id,
       })
     },
     onSuccess: () => {
       setContent('')
+      imagePreviewUrls.forEach((url) => URL.revokeObjectURL(url))
+      setImagePreviewUrls([])
       setSelectedFiles([])
+      setComposerOpen(false)
       queryClient.invalidateQueries({ queryKey: ['group-posts', id] })
       queryClient.invalidateQueries({ queryKey: ['group', id] })
       toast.success('Đăng thảo luận thành công')
@@ -128,23 +155,6 @@ export default function GroupDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['my-groups'] })
       queryClient.invalidateQueries({ queryKey: ['group', id] })
       toast.success('Đã rời nhóm')
-    },
-    onError: (err) => toast.error(extractError(err)),
-  })
-
-  const likeMutation = useMutation({
-    mutationFn: (postId: string) => postsApi.toggleLike(postId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['group-posts', id] })
-    },
-    onError: (err) => toast.error(extractError(err)),
-  })
-
-  const shareMutation = useMutation({
-    mutationFn: (postId: string) => postsApi.sharePost(postId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['group-posts', id] })
-      toast.success('Đã chia sẻ bài viết')
     },
     onError: (err) => toast.error(extractError(err)),
   })
@@ -177,6 +187,31 @@ export default function GroupDetailPage() {
     setContent((prev) => (prev.trim() ? `${prev} ${tag}` : tag))
   }
 
+  const onPickFiles = () => fileInputRef.current?.click()
+
+  const onFilesSelected = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length) return
+
+    const merged = [...selectedFiles, ...files].slice(0, 8)
+    setSelectedFiles(merged)
+
+    imagePreviewUrls.forEach((url) => URL.revokeObjectURL(url))
+    setImagePreviewUrls(merged.filter(isImageFile).map((file) => URL.createObjectURL(file)))
+    e.target.value = ''
+  }
+
+  const removeFileAt = (index: number) => {
+    const nextFiles = selectedFiles.filter((_, i) => i !== index)
+    setSelectedFiles(nextFiles)
+
+    imagePreviewUrls.forEach((url) => URL.revokeObjectURL(url))
+    setImagePreviewUrls(nextFiles.filter(isImageFile).map((file) => URL.createObjectURL(file)))
+  }
+
+  const videoFiles = selectedFiles.filter((file) => isVideoFile(file))
+  const documentFiles = selectedFiles.filter((file) => !isImageFile(file) && !isVideoFile(file))
+
   if (groupQuery.isLoading) return <PostSkeleton />
 
   if (!group) {
@@ -185,11 +220,11 @@ export default function GroupDetailPage() {
 
   return (
     <div className='min-h-screen bg-[#f3f6fb] text-slate-800'>
-      <div className='mx-auto max-w-[1500px] px-6 pb-8 pt-2'>
-        <main className='grid grid-cols-[minmax(0,1fr)_330px] gap-6'>
-          <section className='space-y-6'>
-            <article className='overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm'>
-              <div className='relative h-[260px]'>
+      <div className='mx-auto max-w-[1500px] px-0 sm:px-6 pb-8 pt-0 sm:pt-2'>
+        <main className='grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_330px] gap-0 sm:gap-6'>
+          <section className='space-y-4 sm:space-y-6'>
+            <article className='overflow-hidden rounded-none sm:rounded-[32px] sm:border border-slate-200 bg-white shadow-sm'>
+              <div className='relative h-[180px] sm:h-[220px] md:h-[260px]'>
                 <img
                   src={group.coverUrl || group.coverPhoto || 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=1600&h=520&fit=crop'}
                   alt='cover'
@@ -197,25 +232,25 @@ export default function GroupDetailPage() {
                 />
                 <div className='absolute inset-0 bg-slate-900/45' />
 
-                <div className='absolute inset-0 flex items-end justify-between p-6'>
-                  <div className='text-white'>
+                <div className='absolute inset-0 flex items-end justify-between p-4 sm:p-6'>
+                  <div className='text-white min-w-0 flex-1 mr-2'>
                     <span className='inline-flex rounded-full bg-white/20 px-3 py-1 text-xs font-semibold backdrop-blur'>{activeBadge}</span>
-                    <h1 className='mt-3 text-4xl font-bold tracking-tight'>{group.name}</h1>
-                    <p className='mt-2 text-sm text-slate-100'>
+                    <h1 className='mt-2 text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight truncate'>{group.name}</h1>
+                    <p className='mt-1 text-xs sm:text-sm text-slate-100 line-clamp-2'>
                       {group.description || 'Nhóm cộng đồng EduSocial'} • {group.membersCount ?? members.length} thành viên • {privacyLabel(group.privacy)}
                     </p>
                   </div>
 
-                  <div className='flex gap-2'>
+                  <div className='flex flex-col sm:flex-row gap-2 shrink-0'>
                     <button
                       onClick={() => toast.info('Tính năng mời thành viên sẽ được kết nối ở bước tiếp theo.')}
-                      className='rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100'
+                      className='rounded-xl bg-white px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold text-slate-800 hover:bg-slate-100'
                     >
-                      Mời thành viên
+                      Mời
                     </button>
                     <button
                       onClick={() => leaveMutation.mutate()}
-                      className='rounded-xl border border-white/50 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20'
+                      className='rounded-xl border border-white/50 bg-white/10 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold text-white hover:bg-white/20'
                     >
                       {leaveMutation.isPending ? 'Đang xử lý...' : 'Rời nhóm'}
                     </button>
@@ -223,71 +258,43 @@ export default function GroupDetailPage() {
                 </div>
               </div>
 
-              <div className='grid grid-cols-4 gap-3 border-t border-slate-200 p-4'>
+              <div className='grid grid-cols-2 sm:grid-cols-4 gap-3 border-t border-slate-200 p-3 sm:p-4'>
                 {stats.map((item) => (
-                  <div key={item.label} className='rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3'>
-                    <p className='text-2xl font-semibold leading-none text-slate-900'>{item.value}</p>
-                    <p className='mt-2 text-sm text-slate-500'>{item.label}</p>
+                  <div key={item.label} className='rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3'>
+                    <p className='text-xl sm:text-2xl font-semibold leading-none text-slate-900'>{item.value}</p>
+                    <p className='mt-2 text-xs sm:text-sm text-slate-500'>{item.label}</p>
                   </div>
                 ))}
               </div>
             </article>
 
-            <article className='rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm'>
-              <div className='flex items-start justify-between'>
-                <div>
-                  <h2 className='text-xl font-bold text-slate-900'>Đăng thảo luận</h2>
-                  <p className='mt-1 text-sm text-slate-500'>Chia sẻ tiến độ, câu hỏi hoặc tài liệu mới với cả nhóm.</p>
-                </div>
-                <label className='cursor-pointer rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100'>
-                  Thêm tệp
-                  <input
-                    type='file'
-                    accept='image/*'
-                    multiple
-                    className='hidden'
-                    onChange={(e) => setSelectedFiles(Array.from(e.target.files ?? []))}
-                  />
-                </label>
+            <article className='rounded-[28px] border border-emerald-100 bg-gradient-to-br from-emerald-50/60 via-white to-cyan-50/40 p-5 shadow-sm'>
+              <div className='flex items-center gap-3 mb-3'>
+                <Avatar src={user?.avatar} name={user?.displayName || ''} size='md' />
+                <button
+                  type='button'
+                  onClick={() => setComposerOpen(true)}
+                  className='flex-1 text-left bg-white/90 rounded-full px-4 py-2.5 text-sm text-slate-600 border border-emerald-100 hover:bg-white transition-colors'
+                >
+                  {`${user?.displayName || 'Bạn'} ơi, chia sẻ ý tưởng cho nhóm nhé...`}
+                </button>
               </div>
-
-              <div className='mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3'>
-                <div className='flex items-start gap-3'>
-                  <Avatar src={user?.avatar} name={user?.displayName || 'Me'} size='sm' />
-                  <textarea
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    placeholder='Viết nội dung thảo luận trong nhóm...'
-                    rows={4}
-                    className='min-h-[120px] w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100'
-                  />
-                </div>
-
-                {!!selectedFiles.length && (
-                  <p className='mt-2 text-xs text-slate-500'>Đã chọn {selectedFiles.length} tệp ảnh để tải lên.</p>
-                )}
-
-                <div className='mt-3 flex items-center justify-between'>
-                  <div className='flex gap-2'>
-                    {(['# UI', '# Database', '# Meeting'] as Tag[]).map((tag) => (
-                      <button
-                        type='button'
-                        key={tag}
-                        onClick={() => addTag(tag)}
-                        className='rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-600 hover:bg-blue-100'
-                      >
-                        {tag}
-                      </button>
-                    ))}
-                  </div>
+              <hr className='border-emerald-100 mb-3' />
+              <div className='flex gap-2'>
+                {[
+                  { icon: '📎', label: 'Đính kèm' },
+                  { icon: '💡', label: 'Ý tưởng' },
+                  { icon: '✅', label: 'Tiến độ' },
+                ].map((a) => (
                   <button
-                    onClick={() => createPostMutation.mutate()}
-                    disabled={!content.trim() || createPostMutation.isPending}
-                    className='rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60'
+                    key={a.label}
+                    onClick={() => setComposerOpen(true)}
+                    className='flex-1 flex items-center justify-center gap-2 py-2 rounded-lg hover:bg-emerald-100/60 transition-colors text-sm font-medium text-slate-700'
                   >
-                    {createPostMutation.isPending ? 'Đang đăng...' : 'Đăng bài'}
+                    <span>{a.icon}</span>
+                    <span className='hidden sm:block'>{a.label}</span>
                   </button>
-                </div>
+                ))}
               </div>
             </article>
 
@@ -299,75 +306,7 @@ export default function GroupDetailPage() {
                   Nhóm chưa có bài thảo luận nào.
                 </article>
               ) : (
-                posts.map((post) => (
-                  <article key={post.id} className='rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm'>
-                    <div className='flex items-start justify-between'>
-                      <div className='flex items-start gap-3'>
-                        <Avatar src={post.author?.avatar} name={post.author?.displayName || 'Thành viên'} size='sm' />
-                        <div>
-                          <p className='font-semibold text-slate-900'>{post.author?.displayName || 'Thành viên'}</p>
-                          <p className='text-sm text-slate-500'>Thành viên • {timeAgo(post.createdAt)}</p>
-                        </div>
-                      </div>
-                      <button className='rounded-full p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700'>
-                        <svg viewBox='0 0 24 24' className='h-5 w-5 fill-current'>
-                          <circle cx='5' cy='12' r='2' />
-                          <circle cx='12' cy='12' r='2' />
-                          <circle cx='19' cy='12' r='2' />
-                        </svg>
-                      </button>
-                    </div>
-
-                    <p className='mt-4 text-[15px] leading-7 text-slate-700'>{post.content}</p>
-
-                    {!!post.images?.length && (
-                      <div className='mt-3 grid grid-cols-2 gap-2'>
-                        {post.images.slice(0, 4).map((image, idx) => (
-                          <img key={`${post.id}-${idx}`} src={image} alt='media' className='h-36 w-full rounded-xl object-cover' />
-                        ))}
-                      </div>
-                    )}
-
-                    <div className='mt-3 flex flex-wrap gap-2'>
-                      {post.content.includes('#')
-                        ? post.content
-                            .split(' ')
-                            .filter((word) => word.startsWith('#'))
-                            .slice(0, 4)
-                            .map((tag) => (
-                              <span key={`${post.id}-${tag}`} className='rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600'>
-                                {tag}
-                              </span>
-                            ))
-                        : null}
-                    </div>
-
-                    <div className='mt-4 border-y border-slate-100 py-2 text-sm text-slate-500'>
-                      {post.likesCount} lượt thích • {post.commentsCount} bình luận
-                    </div>
-
-                    <div className='mt-3 grid grid-cols-3 gap-2'>
-                      <button
-                        onClick={() => likeMutation.mutate(post.id)}
-                        className='rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100'
-                      >
-                        Thích
-                      </button>
-                      <button
-                        onClick={() => toast.info('Mở chi tiết bài để bình luận.')}
-                        className='rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100'
-                      >
-                        Bình luận
-                      </button>
-                      <button
-                        onClick={() => shareMutation.mutate(post.id)}
-                        className='rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100'
-                      >
-                        Chia sẻ
-                      </button>
-                    </div>
-                  </article>
-                ))
+                posts.map((post) => <PostCard key={post.id} post={post} />)
               )}
 
               {postsQuery.hasNextPage && (
@@ -380,7 +319,8 @@ export default function GroupDetailPage() {
             </div>
           </section>
 
-          <aside className='space-y-4'>
+          {/* Right sidebar: hidden on mobile, shows below on sm */}
+          <aside className='space-y-4 lg:block'>
             <article className='rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm'>
               <div className='mb-3 flex items-center justify-between'>
                 <h3 className='text-lg font-bold text-slate-900'>Thành viên nổi bật</h3>
@@ -446,6 +386,125 @@ export default function GroupDetailPage() {
           </aside>
         </main>
       </div>
+
+      <Modal
+        open={composerOpen}
+        onClose={() => setComposerOpen(false)}
+        title='Tạo bài thảo luận nhóm'
+        size='xl'
+        footer={(
+          <>
+            <Button variant='secondary' onClick={() => setComposerOpen(false)} disabled={createPostMutation.isPending}>
+              Hủy
+            </Button>
+            <Button
+              onClick={() => createPostMutation.mutate()}
+              loading={createPostMutation.isPending}
+              disabled={!content.trim() || createPostMutation.isPending}
+            >
+              Đăng
+            </Button>
+          </>
+        )}
+      >
+        <div className='space-y-4'>
+          <div className='rounded-2xl border border-emerald-100 bg-emerald-50/50 px-3 py-2.5 flex items-center gap-3'>
+            <Avatar src={user?.avatar} name={user?.displayName || ''} size='md' />
+            <div className='min-w-0'>
+              <p className='text-sm font-semibold text-slate-900 truncate'>{user?.displayName}</p>
+              <p className='text-xs text-slate-600'>Bài viết này sẽ hiển thị trong thảo luận của nhóm</p>
+            </div>
+          </div>
+
+          <div className='flex items-start gap-3'>
+            <Avatar src={user?.avatar} name={user?.displayName || ''} size='md' className='mt-1' />
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder='Viết nội dung thảo luận trong nhóm...'
+              className='flex-1 min-h-[150px] bg-white rounded-2xl px-4 py-3 text-sm resize-none border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-200'
+              rows={5}
+              aria-label='Viết thảo luận'
+            />
+          </div>
+
+          <div className='rounded-2xl border border-slate-200 bg-white p-3'>
+            <div className='flex items-center justify-between gap-2'>
+              <div className='flex gap-2'>
+                {(['# UI', '# Database', '# Meeting'] as Tag[]).map((tag) => (
+                  <button
+                    type='button'
+                    key={tag}
+                    onClick={() => addTag(tag)}
+                    className='rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100'
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+              <Button variant='secondary' size='sm' onClick={onPickFiles}>Thêm ảnh/video/tài liệu</Button>
+            </div>
+            {!!selectedFiles.length && (
+              <p className='mt-2 text-xs text-slate-500'>Đã chọn {selectedFiles.length} tệp</p>
+            )}
+          </div>
+
+          {imagePreviewUrls.length > 0 && (
+            <div className='grid grid-cols-2 gap-2'>
+              {imagePreviewUrls.map((url, idx) => (
+                <div key={`${url}-${idx}`} className='relative rounded-xl overflow-hidden border border-slate-200'>
+                  <img src={url} alt={`Ảnh đã chọn ${idx + 1}`} className='w-full h-32 object-cover' />
+                  <button
+                    className='absolute top-1.5 right-1.5 bg-black/60 text-white text-xs px-2 py-0.5 rounded'
+                    onClick={() => removeFileAt(idx)}
+                    aria-label='Xóa ảnh'
+                  >
+                    X
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {videoFiles.length > 0 && (
+            <div className='space-y-1'>
+              {selectedFiles.map((file, idx) => ({ file, idx })).filter(item => isVideoFile(item.file)).map(({ file, idx }) => (
+                <div key={`${file.name}-${idx}`} className='flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2'>
+                  <span className='text-sm text-slate-800 truncate pr-3'>🎬 {file.name}</span>
+                  <button className='text-xs text-slate-500 hover:text-slate-700' onClick={() => removeFileAt(idx)} aria-label='Xóa tệp video'>
+                    Xóa
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {documentFiles.length > 0 && (
+            <div className='space-y-1'>
+              {selectedFiles.map((file, idx) => ({ file, idx })).filter(item => !isImageFile(item.file) && !isVideoFile(item.file)).map(({ file, idx }) => (
+                <div key={`${file.name}-${idx}`} className='flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2'>
+                  <span className='text-sm text-slate-800 truncate pr-3'>📄 {file.name}</span>
+                  <button className='text-xs text-slate-500 hover:text-slate-700' onClick={() => removeFileAt(idx)} aria-label='Xóa tệp'>
+                    Xóa
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      <input
+        ref={fileInputRef}
+        type='file'
+        accept='image/*,video/mp4,video/webm,video/quicktime,video/x-matroska,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt'
+        multiple
+        className='hidden'
+        onChange={onFilesSelected}
+      />
     </div>
   )
 }
+
+
+

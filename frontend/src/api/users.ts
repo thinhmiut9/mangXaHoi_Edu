@@ -39,6 +39,11 @@ export const usersApi = {
       data: (r.data.data ?? []).map(normalizeUser),
     })),
 
+  mentionSearch: (q: string, limit = 8): Promise<{ userId: string; displayName: string; avatarUrl?: string }[]> =>
+    apiClient
+      .get<ApiResponse<{ userId: string; displayName: string; avatarUrl?: string }[]>>('/users/mention-search', { params: { q, limit } })
+      .then(r => r.data.data ?? []),
+
   searchAll: (q: string, limit = 12) =>
     apiClient
       .get<ApiResponse<{ users: any[]; posts: any[]; groups: any[] }>>('/users/search-all', { params: { q, limit } })
@@ -48,10 +53,17 @@ export const usersApi = {
           users: (payload.users ?? []).map(normalizeUser),
           posts: (payload.posts ?? []).map((raw: any): Post => {
             const author = raw.author ? normalizeUser(raw.author) : null
+            const imageUrls = (raw.imageUrls ?? raw.mediaUrls ?? raw.images ?? []).filter((url: unknown): url is string => typeof url === 'string')
+            const videoUrls = (raw.videoUrls ?? []).filter((url: unknown): url is string => typeof url === 'string')
+            const documentUrls = (raw.documentUrls ?? []).filter((url: unknown): url is string => typeof url === 'string')
             return {
               id: raw.postId ?? raw.id,
               content: raw.content ?? '',
-              images: (raw.mediaUrls ?? raw.images ?? []).filter((url: unknown) => typeof url === 'string'),
+              imageUrls,
+              videoUrls,
+              documentUrls,
+              mediaUrls: [...imageUrls, ...videoUrls],
+              images: imageUrls,
               privacy: raw.visibility ?? raw.privacy ?? 'PUBLIC',
               authorId: raw.author?.userId ?? raw.authorId ?? '',
               author: author
@@ -108,8 +120,17 @@ export const friendsApi = {
   getSuggestions: () =>
     apiClient.get<ApiResponse<any[]>>('/friends/suggestions').then(r => (r.data.data ?? []).map(normalizeUser) as User[]),
 
+  getBlockedUsers: () =>
+    apiClient.get<ApiResponse<any[]>>('/friends/blocked').then(r => (r.data.data ?? []).map(normalizeUser) as User[]),
+
   sendRequest: (userId: string) =>
     apiClient.post(`/friends/request/${userId}`),
+
+  blockUser: (userId: string) =>
+    apiClient.post(`/friends/block/${userId}`),
+
+  unblockUser: (userId: string) =>
+    apiClient.delete(`/friends/block/${userId}`),
 
   cancelRequest: (userId: string) =>
     apiClient.delete(`/friends/request/${userId}`),

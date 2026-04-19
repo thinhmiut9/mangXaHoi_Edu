@@ -42,7 +42,7 @@ export const usersController = {
   async searchUsers(req: Request, res: Response, next: NextFunction) {
     try {
       const { q, page, limit } = req.query as { q: string; page: string; limit: string }
-      const result = await usersService.searchUsers(q, +page || 1, +limit || 10)
+      const result = await usersService.searchUsers(req.user!.userId, q, +page || 1, +limit || 10)
       sendSuccess(res, result.users, 'Tìm kiếm thành công', 200, result.meta)
     } catch (err) {
       next(err)
@@ -54,6 +54,16 @@ export const usersController = {
       const { q, limit } = req.query as { q: string; limit: string }
       const result = await usersService.searchAll(req.user!.userId, q, +limit || 12)
       sendSuccess(res, result, 'Tìm kiếm thành công')
+    } catch (err) {
+      next(err)
+    }
+  },
+
+  async mentionSearch(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { q, limit } = req.query as { q: string; limit: string }
+      const users = await usersService.mentionSearch(req.user!.userId, q || '', +limit || 8)
+      sendSuccess(res, users)
     } catch (err) {
       next(err)
     }

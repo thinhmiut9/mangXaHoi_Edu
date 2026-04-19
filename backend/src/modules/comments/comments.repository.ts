@@ -11,7 +11,7 @@ export const commentsRepository = {
          parentId: $parentId,
          createdAt: $now, updatedAt: $now
        })
-       CREATE (u)-[:WROTE]->(c)
+       CREATE (u)-[:WROTE {createdAt: $now}]->(c)
        CREATE (p)-[:HAS_COMMENT]->(c)
        RETURN c`,
       { ...data, parentId: data.parentId ?? null, now }
@@ -104,6 +104,16 @@ export const commentsRepository = {
       { commentId }
     )
     return result?.authorId ?? null
+  },
+
+  async getPostIdByCommentId(commentId: string): Promise<string | null> {
+    const result = await runQueryOne<{ postId: string }>(
+      `MATCH (p:Post)-[:HAS_COMMENT]->(c:Comment)
+       WHERE c.commentId = $commentId OR c.id = $commentId
+       RETURN p.postId AS postId`,
+      { commentId }
+    )
+    return result?.postId ?? null
   },
 }
 

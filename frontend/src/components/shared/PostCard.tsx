@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Comment as PostComment, Post, postsApi } from '@/api/posts'
@@ -13,10 +13,41 @@ import { useToast } from '@/components/ui/Toast'
 import { timeAgo } from '@/utils/format'
 import { extractError } from '@/api/client'
 import { cn } from '@/utils/cn'
+import { MentionInput } from '@/components/ui/MentionTextarea'
+import { MentionText } from '@/components/ui/MentionText'
 
 interface PostCardProps {
   post: Post
   showComments?: boolean
+}
+
+function isImageLikeUrl(url: string): boolean {
+  return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(url) || url.includes('/image/upload/')
+}
+
+function isDocumentLikeUrl(url: string): boolean {
+  return /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar)(\?|$)/i.test(url) || url.includes('/raw/upload/')
+}
+
+function isVideoLikeUrl(url: string): boolean {
+  return /\.(mp4|webm|mov|mkv)(\?|$)/i.test(url) || url.includes('/video/upload/')
+}
+
+function getFileName(url: string): string {
+  const noQuery = url.split('?')[0]
+  const part = noQuery.split('/').pop() || 'Tài liệu đính kèm'
+  try {
+    return decodeURIComponent(part)
+  } catch {
+    return part
+  }
+}
+
+function getFileExtLabel(url: string): string {
+  const name = getFileName(url)
+  const dot = name.lastIndexOf('.')
+  if (dot < 0 || dot === name.length - 1) return 'FILE'
+  return name.slice(dot + 1).toUpperCase().slice(0, 5)
 }
 
 export function PostCard({ post, showComments = false }: PostCardProps) {
@@ -71,7 +102,7 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
   const shareMutation = useMutation({
     mutationFn: () => postsApi.sharePost(post.id),
     onSuccess: (data) => {
-      toast.success(data.shared ? 'Đã chia sẻ bài viết' : 'Bạn đã chia sẻ bài này rồi')
+      toast.success(data.shared ? 'Đã chia sẻ bài viết về trang cá nhân' : 'Bạn đã chia sẻ bài này rồi')
       queryClient.invalidateQueries({ queryKey: ['feed'] })
       queryClient.invalidateQueries({ queryKey: ['user-posts'] })
       queryClient.invalidateQueries({ queryKey: ['post', post.id] })
@@ -155,6 +186,18 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
   })
 
   const isOwnPost = user?.id === post.authorId
+  const contentHashtags = post.content
+    .split(/\s+/)
+    .filter((word) => /^#[\p{L}\p{N}_-]+$/u.test(word))
+    .slice(0, 4)
+  const allMedia = (post.mediaUrls ?? post.images ?? []).filter(Boolean)
+  const imageUrls = Array.from(
+    new Set([...(post.imageUrls ?? post.images ?? []), ...allMedia.filter(isImageLikeUrl)])
+  )
+  const videoUrls = Array.from(new Set([...(post.videoUrls ?? []), ...allMedia.filter(isVideoLikeUrl)]))
+  const documentUrls = Array.from(
+    new Set([...(post.documentUrls ?? []), ...allMedia.filter((url) => !isImageLikeUrl(url) && !isVideoLikeUrl(url) && isDocumentLikeUrl(url))])
+  )
   const isGroupPost = Boolean(post.groupId && post.groupId !== 'null')
   const displayGroupName = post.groupName || fallbackGroupMeta?.name || 'Nhóm'
   const displayGroupCoverUrl = post.groupCoverUrl || fallbackGroupMeta?.coverUrl || fallbackGroupMeta?.coverPhoto
@@ -177,6 +220,7 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
     return acc
   }, {})
   const rootComments = commentsList.filter(comment => !comment.parentId)
+  const handleSharePost = () => shareMutation.mutate()
 
   const renderComment = (comment: PostComment, depth = 0): JSX.Element => {
     const isOwnComment = user?.id === comment.authorId
@@ -203,7 +247,9 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
                   </button>
                 )}
               </div>
-              <p className="text-sm text-text-primary whitespace-pre-wrap">{comment.content}</p>
+              <p className="text-sm text-text-primary whitespace-pre-wrap">
+                <MentionText content={comment.content} />
+              </p>
             </div>
 
             <div className="mt-1 ml-2 flex items-center gap-3 text-xs text-text-muted">
@@ -232,17 +278,13 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
 
             {isReplyingThis && (
               <div className="mt-2 flex items-center gap-2 bg-app-bg rounded-full px-3 py-1.5">
-                <input
-                  type="text"
+                <MentionInput
                   value={replyText}
-                  onChange={e => setReplyText(e.target.value)}
+                  onChange={setReplyText}
                   placeholder="Viết phản hồi..."
                   className="flex-1 bg-transparent text-sm focus:outline-none"
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && !e.shiftKey && replyText.trim()) {
-                      e.preventDefault()
-                      commentMutation.mutate({ content: replyText.trim(), parentId: comment.id })
-                    }
+                  onSubmit={() => {
+                    if (replyText.trim()) commentMutation.mutate({ content: replyText.trim(), parentId: comment.id })
                   }}
                 />
                 {replyText.trim() && (
@@ -265,7 +307,7 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
   }
 
   const renderPostMedia = () => {
-    const images = post.images ?? []
+    const images = imageUrls.filter(Boolean)
     if (images.length === 0) return null
 
     const visible = images.slice(0, 5)
@@ -347,11 +389,22 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
     )
   }
 
-  return (
-    <article className="bg-white rounded-md border border-border-light shadow-card">
-      {renderPostMedia()}
+  const renderPostVideos = () => {
+    if (videoUrls.length === 0) return null
+    return (
+      <div className="p-3 pt-0 space-y-2">
+        {videoUrls.slice(0, 2).map((url, idx) => (
+          <div key={`${post.id}-video-${idx}`} className="w-full overflow-hidden rounded-md border-2 border-border-light bg-app-bg">
+            <video src={url} className="w-full max-h-96 object-cover" controls preload="metadata" />
+          </div>
+        ))}
+      </div>
+    )
+  }
 
-      <div className="px-5 py-4">
+  return (
+    <article className="bg-white rounded-xl border border-border-light shadow-card overflow-hidden">
+      <div className="px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
             {isGroupPost ? (
@@ -372,9 +425,13 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
                 </div>
 
                 <div className="flex flex-col min-w-0">
-                  <p className="text-[15px] leading-tight font-semibold text-text-primary truncate" title={displayGroupName || fallbackGroupLabel}>
+                  <Link
+                    to={`/groups/${post.groupId}`}
+                    className="text-[15px] leading-tight font-semibold text-text-primary truncate hover:underline"
+                    title={displayGroupName || fallbackGroupLabel}
+                  >
                     {displayGroupName || fallbackGroupLabel}
-                  </p>
+                  </Link>
                   <div className="flex items-center text-[12px] text-text-muted mt-0.5 gap-1 min-w-0">
                     <Link to={`/profile/${post.authorId}`} className="hover:underline truncate max-w-[180px]">
                       {post.author?.displayName}
@@ -398,7 +455,7 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
                   <Avatar src={post.author?.avatar} name={post.author?.displayName ?? ''} size="sm" />
                 </Link>
                 <div className="flex flex-col min-w-0">
-                  <Link to={`/profile/${post.authorId}`} className="text-[15px] leading-tight font-semibold text-text-primary hover:underline truncate">
+                  <Link to={`/profile/${post.authorId}`} className="text-[14px] leading-tight font-semibold text-text-primary hover:underline truncate">
                     {post.author?.displayName}
                   </Link>
                   <div className="flex items-center text-[12px] text-text-muted mt-0.5 gap-1">
@@ -417,40 +474,6 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
             )}
           </div>
           <div className="flex items-center gap-1 text-sm text-text-secondary relative top-[2px]">
-            <div className="hidden lg:flex items-center gap-2">
-              <button
-                type="button"
-                className={cn(
-                  'flex items-center gap-1 px-2 py-1 rounded-md transition-colors',
-                  post.isLiked ? 'text-red-500 bg-red-50' : 'text-text-secondary hover:bg-hover-bg'
-                )}
-                onClick={() => likeMutation.mutate()}
-              >
-                <span className="text-xl leading-none">{post.isLiked ? '♥' : '♡'}</span>
-                <span>{post.likesCount}</span>
-              </button>
-              <button type="button" className="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-hover-bg" onClick={openDetail}>
-                <span className="text-xl leading-none">💬</span>
-                <span>{post.commentsCount}</span>
-              </button>
-              <button type="button" className="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-hover-bg" onClick={() => shareMutation.mutate()}>
-                <span className="flex items-center justify-center w-[20px] h-[20px]">
-                  <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
-                </span>
-                <span>{post.sharesCount}</span>
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  'px-2 py-1 rounded-md transition-colors',
-                  post.isSaved ? 'text-primary-600 bg-primary-50' : 'text-text-secondary hover:bg-hover-bg'
-                )}
-                onClick={() => saveMutation.mutate()}
-              >
-                <span className="text-xl leading-none">🔖</span>
-              </button>
-            </div>
-
             <div className="relative ml-1">
               <button onClick={() => setMenuOpen(!menuOpen)} className="p-1.5 rounded-full hover:bg-hover-bg text-text-secondary transition-colors" aria-label="Tùy chọn">
                 <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
@@ -459,6 +482,28 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)}></div>
                   <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-border-light shadow-lg rounded-md z-20 py-1 overflow-hidden font-medium">
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false)
+                        handleSharePost()
+                      }}
+                      className="w-full text-left px-4 py-2 hover:bg-hover-bg text-sm text-text-primary"
+                      disabled={shareMutation.isPending}
+                    >
+                      Chia sẻ bài viết
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false)
+                        saveMutation.mutate()
+                      }}
+                      className="w-full text-left px-4 py-2 hover:bg-hover-bg text-sm text-text-primary"
+                      disabled={saveMutation.isPending}
+                    >
+                      {post.isSaved ? 'Bỏ lưu bài viết' : 'Lưu bài viết'}
+                    </button>
+                    <div className="my-1 border-t border-border-light" />
+
                     {isOwnPost || user?.role === 'ADMIN' ? (
                       <>
                         {isOwnPost && (
@@ -484,16 +529,89 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
         </div>
 
 
-        <button
-          type="button"
-          onClick={openDetail}
-          className="mt-2 text-left w-full text-[13px] leading-5 text-text-primary line-clamp-3"
-        >
-          {post.content}
+        {post.content && (
+          <button
+            type="button"
+            onClick={openDetail}
+            className="mt-2 text-left w-full text-[21px] leading-8 font-semibold text-slate-800 line-clamp-2"
+          >
+            <MentionText content={post.content} />
+          </button>
+        )}
+
+        {contentHashtags.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {contentHashtags.map((tag, idx) => (
+              <button
+                key={`${post.id}-tag-${idx}`}
+                type="button"
+                onClick={openDetail}
+                className="text-[13px] font-medium text-blue-600 hover:underline"
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {documentUrls.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {documentUrls.slice(0, 2).map((url, idx) => (
+              <a
+                key={`${post.id}-doc-${idx}`}
+                href={url}
+                download={getFileName(url)}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 hover:bg-slate-100"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="h-9 w-9 rounded-lg bg-red-100 text-red-600 grid place-items-center text-[11px] font-bold">
+                    {getFileExtLabel(url)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-slate-800 truncate">{getFileName(url)}</p>
+                    <p className="text-[12px] text-slate-500">Tài liệu đính kèm</p>
+                  </div>
+                </div>
+                <span className="text-blue-500" aria-hidden="true">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path d="M12 3v12" />
+                    <path d="m7 10 5 5 5-5" />
+                    <path d="M5 21h14" />
+                  </svg>
+                </span>
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {renderPostMedia()}
+      {renderPostVideos()}
+
+      <div className="hidden lg:flex items-center justify-between border-t border-border-light px-4 py-2 bg-white">
+        <div className="flex items-center gap-5">
+          <button
+            type="button"
+            className={cn('flex items-center gap-1.5 text-sm', post.isLiked ? 'text-red-500' : 'text-slate-500 hover:text-slate-700')}
+            onClick={() => likeMutation.mutate()}
+          >
+            <span className="text-lg leading-none">{post.isLiked ? '♥' : '♡'}</span>
+            <span>{post.likesCount}</span>
+          </button>
+          <button type="button" className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700" onClick={openDetail}>
+            <span className="text-lg leading-none">💬</span>
+            <span>{post.commentsCount}</span>
+          </button>
+        </div>
+        <button type="button" className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700" onClick={handleSharePost}>
+          <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+          <span>Chia sẻ</span>
         </button>
       </div>
 
-      <div className="flex lg:hidden items-end border-t border-border-light px-3 pt-2 pb-2 bg-white mt-4 gap-1 rounded-b-md">
+      <div className="flex lg:hidden items-end border-t border-border-light px-3 pt-2 pb-2 bg-white gap-1 rounded-b-md">
         {[
           {
             id: 'like',
@@ -512,7 +630,7 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
             id: 'share',
             label: post.isShared ? 'Đã chia sẻ' : 'Chia sẻ',
             icon: <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>,
-            onClick: () => shareMutation.mutate(),
+            onClick: handleSharePost,
             active: post.isShared,
           },
           {
@@ -559,17 +677,52 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
             <div>
               <p className="font-semibold text-text-primary">{post.author?.displayName}</p>
               <p className="text-xs text-text-muted">
-                {timeAgo(post.createdAt)} · {post.privacy === 'PUBLIC' ? 'C\\u00F4ng khai' : post.privacy === 'FRIENDS' ? 'B\\u1EA1n b\\u00E8' : 'Ri\\u00EAng t\\u01B0'}
+                {timeAgo(post.createdAt)} · {post.privacy === 'PUBLIC' ? 'C\u00F4ng khai' : post.privacy === 'FRIENDS' ? 'B\u1EA1n b\u00E8' : 'Ri\u00EAng t\u01B0'}
               </p>
             </div>
           </div>
 
-          <p className="text-sm text-text-primary whitespace-pre-wrap">{post.content}</p>
+          <p className="text-sm text-text-primary whitespace-pre-wrap">
+            <MentionText content={post.content} />
+          </p>
 
-          {post.images && post.images.length > 0 && (
-            <div className={cn('grid gap-1', post.images.length === 1 ? 'grid-cols-1' : 'grid-cols-2')}>
-              {post.images.map((img, idx) => (
+          {imageUrls.length > 0 && (
+            <div className={cn('grid gap-1', imageUrls.length === 1 ? 'grid-cols-1' : 'grid-cols-2')}>
+              {imageUrls.map((img, idx) => (
                 <img key={idx} src={img} alt={`Ảnh bài viết ${idx + 1}`} className="w-full h-56 object-cover rounded-md border border-border-light" />
+              ))}
+            </div>
+          )}
+
+          {videoUrls.length > 0 && (
+            <div className="space-y-2">
+              {videoUrls.map((url, idx) => (
+                <video key={`${url}-${idx}`} src={url} className="w-full max-h-96 rounded-md border border-border-light bg-black object-contain" controls preload="metadata" />
+              ))}
+            </div>
+          )}
+
+          {documentUrls.length > 0 && (
+            <div className="space-y-2">
+              {documentUrls.map((url, idx) => (
+                <a
+                  key={`${post.id}-detail-doc-${idx}`}
+                  href={url}
+                  download={getFileName(url)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 hover:bg-slate-100"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="h-9 w-9 rounded-lg bg-red-100 text-red-600 grid place-items-center text-[11px] font-bold">
+                      {getFileExtLabel(url)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-semibold text-slate-800 truncate">{getFileName(url)}</p>
+                      <p className="text-[12px] text-slate-500">Tài liệu đính kèm</p>
+                    </div>
+                  </div>
+                </a>
               ))}
             </div>
           )}
@@ -585,19 +738,13 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
           <div className="flex items-center gap-2">
             <Avatar src={user?.avatar} name={user?.displayName ?? ''} size="sm" />
             <div className="flex-1 flex items-center gap-2 bg-app-bg rounded-full px-4 py-2">
-              <input
-                type="text"
+              <MentionInput
                 value={newComment}
-                onChange={e => setNewComment(e.target.value)}
+                onChange={setNewComment}
                 placeholder="Viết bình luận..."
                 className="flex-1 bg-transparent text-sm focus:outline-none"
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) {
-                    e.preventDefault()
-                    commentMutation.mutate({ content: newComment.trim() })
-                  }
-                }}
                 aria-label="Viết bình luận"
+                onSubmit={() => { if (newComment.trim()) commentMutation.mutate({ content: newComment.trim() }) }}
               />
               {newComment.trim() && (
                 <button

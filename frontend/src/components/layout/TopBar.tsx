@@ -1,59 +1,11 @@
 ﻿import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { useNotificationStore } from '@/store/notificationStore'
 import { authApi } from '@/api/auth'
 import { disconnectSocket } from '@/socket/socketClient'
 import { Avatar } from '@/components/ui/Avatar'
 import { cn } from '@/utils/cn'
-
-const navItems = [
-  {
-    to: '/',
-    label: 'Trang chủ',
-    icon: (
-      <svg className="h-7 w-7" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
-      </svg>
-    ),
-  },
-  {
-    to: '/friends',
-    label: 'Bạn bè',
-    icon: (
-      <svg className="h-7 w-7" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
-      </svg>
-    ),
-  },
-  {
-    to: '/groups',
-    label: 'Nhóm',
-    icon: (
-      <svg className="h-7 w-7" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z" />
-      </svg>
-    ),
-  },
-  {
-    to: '/chat',
-    label: 'Tin nhắn',
-    icon: (
-      <svg className="h-7 w-7" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z" />
-      </svg>
-    ),
-  },
-  {
-    to: '/notifications',
-    label: 'Thông báo',
-    icon: (
-      <svg className="h-7 w-7" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
-      </svg>
-    ),
-  },
-]
 
 const mobileTabItems = [
   { to: '/', label: 'Trang chủ', icon: 'home' },
@@ -104,6 +56,15 @@ export function TopBar() {
   const isChatPage = location.pathname.startsWith('/chat')
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('theme-mode')
+    return saved === 'dark' ? 'dark' : 'light'
+  })
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', themeMode)
+    localStorage.setItem('theme-mode', themeMode)
+  }, [themeMode])
 
   const handleLogout = async () => {
     try {
@@ -125,7 +86,7 @@ export function TopBar() {
   }
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-40 border-b border-border-light bg-white shadow-sm">
+    <header className="fixed left-0 right-0 top-0 z-40 border-b border-border-light bg-white/90 backdrop-blur-md shadow-sm">
       <div className="md:hidden">
         <div className="flex h-14 items-center justify-between px-3">
           <div className="flex items-center gap-2">
@@ -203,7 +164,7 @@ export function TopBar() {
         )}
       </div>
 
-      <div className="hidden h-14 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-4 md:grid">
+      <div className="hidden h-14 grid-cols-[minmax(0,1fr)_minmax(0,520px)_minmax(0,1fr)] items-center gap-3 px-4 md:grid">
         <div className="flex min-w-0 items-center gap-3">
           <Link to="/" className="flex items-center gap-1.5" aria-label="EduSocial - Trang chủ">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-500">
@@ -213,54 +174,23 @@ export function TopBar() {
           </Link>
         </div>
 
-        <nav className="flex w-[420px] max-w-[62vw] items-center justify-between" aria-label="Điều hướng chính">
-          {navItems.map(item => {
-            const isActive = item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to)
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                aria-label={item.label}
-                className={cn(
-                  'relative flex h-12 w-14 items-center justify-center rounded-lg transition-colors duration-150',
-                  item.to === '/chat' && 'md:hidden',
-                  isActive ? 'text-primary-500' : 'text-text-muted hover:bg-hover-bg hover:text-text-primary'
-                )}
-              >
-                {item.icon}
-                {item.to === '/notifications' && unreadNotificationCount > 0 && (
-                  <span className="absolute right-1 top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                    {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
-                  </span>
-                )}
-                {item.to === '/chat' && unreadMessageCount > 0 && (
-                  <span className="absolute right-1 top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                    {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
-                  </span>
-                )}
-                {isActive && <span className="absolute bottom-0 left-1/2 h-[3px] w-10 -translate-x-1/2 rounded-full bg-primary-500" />}
-              </Link>
-            )
-          })}
-        </nav>
+        <form onSubmit={handleSearch} className="mx-auto w-full max-w-[520px]">
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="search"
+              placeholder="Tìm kiếm EduSocial..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="h-10 w-full rounded-full border border-transparent bg-app-bg pl-10 pr-4 text-sm focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              aria-label="Tìm kiếm"
+            />
+          </div>
+        </form>
 
         <div className="flex items-center justify-end gap-2">
-          <form onSubmit={handleSearch} className="hidden md:block">
-            <div className="relative">
-              <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="search"
-                placeholder="Tìm kiếm EduSocial..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="h-9 w-[220px] max-w-[24vw] rounded-full border border-transparent bg-app-bg pl-10 pr-4 text-sm focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                aria-label="Tìm kiếm"
-              />
-            </div>
-          </form>
-
           <div className="relative">
             <button
               onClick={() => setShowUserMenu(m => !m)}
@@ -280,6 +210,13 @@ export function TopBar() {
                     <p className="text-xs text-text-secondary">Xem trang cá nhân</p>
                   </div>
                 </Link>
+                <button
+                  onClick={() => setThemeMode((prev) => (prev === 'light' ? 'dark' : 'light'))}
+                  className="flex w-full items-center justify-between px-4 py-2 text-left text-sm text-text-primary hover:bg-hover-bg"
+                >
+                  <span>{themeMode === 'light' ? 'Ban đêm' : 'Ban ngày'}</span>
+                  <span aria-hidden="true">{themeMode === 'light' ? '🌙' : '☀️'}</span>
+                </button>
                 <hr className="my-1 border-border-light" />
                 <button
                   onClick={() => void handleLogout()}

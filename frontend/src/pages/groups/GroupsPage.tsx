@@ -1,4 +1,4 @@
-﻿import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Group, GroupJoinRequest, groupsApi, uploadsApi } from '@/api/index'
@@ -73,15 +73,11 @@ export default function GroupsPage() {
   const myGroupsQuery = useQuery({
     queryKey: ['my-groups'],
     queryFn: groupsApi.getMyGroups,
-    refetchInterval: 5000,
-    refetchIntervalInBackground: true,
   })
 
   const groupsQuery = useQuery({
     queryKey: ['groups'],
     queryFn: groupsApi.list,
-    refetchInterval: 5000,
-    refetchIntervalInBackground: true,
   })
 
   const ownerJoinRequestsQuery = useQuery({
@@ -103,8 +99,6 @@ export default function GroupsPage() {
       return result.flat()
     },
     enabled: !!myGroupsQuery.data,
-    refetchInterval: 3000,
-    refetchIntervalInBackground: true,
   })
 
   const joinMutation = useMutation({
@@ -187,9 +181,9 @@ export default function GroupsPage() {
   return (
     <>
       <div className='space-y-6 pb-8'>
-        <section className='rounded-[32px] border border-slate-200/80 bg-white/80 p-4 shadow-[0_16px_36px_rgba(15,23,42,0.08)] backdrop-blur-sm'>
+        <section className='sm:rounded-[32px] sm:border border-slate-200/80 bg-white/80 sm:p-3 p-0 sm:shadow-[0_16px_36px_rgba(15,23,42,0.08)] backdrop-blur-sm'>
           <div className='grid grid-cols-1 gap-5'>
-            <article className='relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#0f1b4d] via-[#243c8f] to-[#312e81] p-5 text-white shadow-[0_14px_28px_rgba(30,64,175,0.38)]'>
+            <article className='relative overflow-hidden rounded-[22px] sm:rounded-[28px] bg-gradient-to-br from-[#0f1b4d] via-[#243c8f] to-[#312e81] p-4 sm:p-5 text-white shadow-[0_14px_28px_rgba(30,64,175,0.38)]'>
               <div className='pointer-events-none absolute -left-16 -top-20 h-56 w-56 rounded-full bg-blue-400/25 blur-3xl' />
               <div className='pointer-events-none absolute -bottom-20 right-0 h-64 w-64 rounded-full bg-indigo-300/20 blur-3xl' />
 
@@ -197,12 +191,12 @@ export default function GroupsPage() {
                 <span className='inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold backdrop-blur'>
                   Không gian nhóm mới
                 </span>
-                <h1 className='mt-2 text-4xl font-bold tracking-tight'>Nhóm</h1>
-                <p className='mt-2 max-w-3xl text-[16px]/7 text-blue-100'>
+                <h1 className='mt-2 text-2xl sm:text-4xl font-bold tracking-tight'>Nhóm</h1>
+                <p className='mt-2 max-w-3xl text-sm sm:text-[16px]/7 text-blue-100'>
                   Tạo nhóm, quản lý thành viên và chia sẻ nội dung trong một giao diện gọn gàng, hiện đại và trực quan hơn.
                 </p>
 
-                <div className='mt-4 flex flex-wrap gap-2.5'>
+                <div className='mt-3 sm:mt-4 flex flex-wrap gap-2 sm:gap-2.5'>
                   <Button
                     onClick={() => setShowCreateGroupModal(true)}
                     className='!rounded-2xl !bg-white !px-4 !text-slate-900 hover:!bg-slate-100'
@@ -221,13 +215,13 @@ export default function GroupsPage() {
                   </Button>
                 </div>
 
-                <div className='mt-5 grid grid-cols-1 gap-2.5 sm:grid-cols-2'>
+                <div className='mt-4 sm:mt-5 grid grid-cols-2 gap-2 sm:gap-2.5'>
                   <button
                     onClick={() => myGroupsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
                     className='rounded-2xl border border-white/10 bg-white/10 p-2.5 text-left backdrop-blur-sm transition hover:bg-white/20'
                   >
                     <p className='text-2xl font-semibold leading-none'>{stats.joinedGroups.toString().padStart(2, '0')}</p>
-                    <p className='mt-1.5 text-sm text-blue-100'>Nhóm đang tham gia</p>
+                    <p className='mt-1.5 text-xs sm:text-sm text-blue-100'>Nhóm đang tham gia</p>
                   </button>
 
                   <button
@@ -238,7 +232,7 @@ export default function GroupsPage() {
                     className='rounded-2xl border border-white/10 bg-white/10 p-2.5 text-left backdrop-blur-sm transition hover:bg-white/20'
                   >
                     <p className='text-2xl font-semibold leading-none'>{stats.pendingApprovals.toString().padStart(2, '0')}</p>
-                    <p className='mt-1.5 text-sm text-blue-100'>Yêu cầu chờ duyệt</p>
+                    <p className='mt-1.5 text-xs sm:text-sm text-blue-100'>Yêu cầu chờ duyệt</p>
                   </button>
                 </div>
               </div>
@@ -248,7 +242,7 @@ export default function GroupsPage() {
 
         <div className='grid grid-cols-1 gap-5'>
           <main className='space-y-5'>
-            <section ref={myGroupsSectionRef} className='rounded-[32px] border border-slate-200/80 bg-white p-5 shadow-[0_16px_36px_rgba(15,23,42,0.08)]'>
+            <section ref={myGroupsSectionRef} className='sm:rounded-[32px] sm:border border-slate-200/80 bg-white sm:p-5 p-3 sm:shadow-[0_16px_36px_rgba(15,23,42,0.08)]'>
               <div className='mb-4 flex items-center justify-between'>
                 <div>
                   <h2 className='text-2xl font-bold text-slate-800'>Nhóm của bạn</h2>
@@ -303,7 +297,7 @@ export default function GroupsPage() {
               )}
             </section>
 
-            <section ref={discoverSectionRef} className='rounded-[32px] border border-slate-200/80 bg-white p-5 shadow-[0_16px_36px_rgba(15,23,42,0.08)]'>
+            <section ref={discoverSectionRef} className='sm:rounded-[32px] sm:border border-slate-200/80 bg-white sm:p-5 p-3 sm:shadow-[0_16px_36px_rgba(15,23,42,0.08)]'>
               <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
                 <div>
                   <h2 className='text-2xl font-bold text-slate-800'>Khám phá nhóm</h2>
@@ -337,18 +331,18 @@ export default function GroupsPage() {
               ) : (
                 <div className='space-y-3'>
                   {discoverGroups.map((group: Group) => (
-                    <article key={group.id} className='rounded-3xl border border-slate-200 bg-slate-50/70 p-4 transition hover:border-blue-200 hover:bg-white hover:shadow-[0_12px_26px_rgba(37,99,235,0.14)]'>
-                      <div className='flex items-start justify-between gap-3'>
+                    <article key={group.id} className='rounded-3xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4 transition hover:border-blue-200 hover:bg-white hover:shadow-[0_12px_26px_rgba(37,99,235,0.14)]'>
+                      <div className='flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3'>
                         <div className='flex min-w-0 gap-3'>
-                          <img src={groupCover(group)} alt={group.name} className='h-14 w-14 rounded-2xl object-cover ring-1 ring-slate-200' />
+                          <img src={groupCover(group)} alt={group.name} className='h-12 w-12 sm:h-14 sm:w-14 rounded-2xl object-cover ring-1 ring-slate-200 shrink-0' />
                           <div className='min-w-0'>
                             <div className='flex flex-wrap items-center gap-2'>
-                              <h3 className='text-2xl font-semibold text-slate-800'>{group.name}</h3>
+                              <h3 className='text-lg sm:text-2xl font-semibold text-slate-800'>{group.name}</h3>
                               <span className='rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600'>{privacyLabel((group.privacy as GroupPrivacy) ?? 'PUBLIC')}</span>
-                              <span className='text-sm text-slate-500'>{group.membersCount ?? 0} thành viên</span>
+                              <span className='text-xs sm:text-sm text-slate-500'>{group.membersCount ?? 0} thành viên</span>
                             </div>
-                            <p className='mt-1 text-sm text-slate-600'>{group.description || 'Nhóm học tập và trao đổi kiến thức.'}</p>
-                            <div className='mt-2 flex flex-wrap gap-1.5'>
+                            <p className='mt-1 text-xs sm:text-sm text-slate-600 line-clamp-2'>{group.description || 'Nhóm học tập và trao đổi kiến thức.'}</p>
+                            <div className='mt-1.5 sm:mt-2 flex flex-wrap gap-1.5'>
                               {inferTags(group).map((tag) => (
                                 <span key={tag} className='rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600'>{tag}</span>
                               ))}
@@ -356,22 +350,24 @@ export default function GroupsPage() {
                           </div>
                         </div>
 
-                        {group.isJoinRequested ? (
-                          <Button
-                            disabled
-                            className='rounded-2xl bg-slate-300 px-4 text-slate-700'
-                          >
-                            Đang chờ duyệt
-                          </Button>
-                        ) : (
-                          <Button
-                            loading={joinMutation.isPending}
-                            onClick={() => joinMutation.mutate(group.id)}
-                            className='rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 shadow-[0_10px_18px_rgba(37,99,235,0.35)] hover:from-blue-500 hover:to-indigo-500'
-                          >
-                            Tham gia
-                          </Button>
-                        )}
+                        <div className='sm:shrink-0'>
+                          {group.isJoinRequested ? (
+                            <Button
+                              disabled
+                              className='w-full sm:w-auto rounded-2xl bg-slate-300 px-4 text-slate-700'
+                            >
+                              Đang chờ duyệt
+                            </Button>
+                          ) : (
+                            <Button
+                              loading={joinMutation.isPending}
+                              onClick={() => joinMutation.mutate(group.id)}
+                              className='w-full sm:w-auto rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 shadow-[0_10px_18px_rgba(37,99,235,0.35)] hover:from-blue-500 hover:to-indigo-500'
+                            >
+                              Tham gia
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </article>
                   ))}

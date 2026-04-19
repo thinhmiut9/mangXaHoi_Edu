@@ -4,6 +4,10 @@ import { normalizeUser, toIsoString, toNumber } from './normalize'
 export interface Post {
   id: string
   content: string
+  imageUrls?: string[]
+  videoUrls?: string[]
+  documentUrls?: string[]
+  mediaUrls?: string[]
   images?: string[]
   privacy: string
   authorId: string
@@ -48,13 +52,55 @@ function isCloudinaryImageUrl(url: unknown): url is string {
   )
 }
 
+function isCloudinaryVideoUrl(url: unknown): url is string {
+  return (
+    typeof url === 'string' &&
+    url.startsWith('https://res.cloudinary.com/') &&
+    url.includes('/video/upload/')
+  )
+}
+
+function isCloudinaryRawUrl(url: unknown): url is string {
+  return (
+    typeof url === 'string' &&
+    url.startsWith('https://res.cloudinary.com/') &&
+    url.includes('/raw/upload/')
+  )
+}
+
 function normalizePost(raw: any): Post {
   const author = raw.author ? normalizeUser(raw.author) : null
-  const images = (raw.mediaUrls ?? raw.images ?? []).filter(isCloudinaryImageUrl)
+  const legacyMediaUrls: string[] = (raw.mediaUrls ?? raw.images ?? []).filter(
+    (url: unknown): url is string => typeof url === 'string' && url.length > 0
+  )
+  const imageUrls: string[] = (raw.imageUrls ?? []).filter(
+    (url: unknown): url is string => typeof url === 'string' && url.length > 0
+  )
+  const videoUrls: string[] = (raw.videoUrls ?? []).filter(
+    (url: unknown): url is string => typeof url === 'string' && url.length > 0
+  )
+  const documentUrls: string[] = (raw.documentUrls ?? []).filter(
+    (url: unknown): url is string => typeof url === 'string' && url.length > 0
+  )
+
+  for (const url of legacyMediaUrls) {
+    if (isCloudinaryImageUrl(url) || /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(url)) imageUrls.push(url)
+    else if (isCloudinaryVideoUrl(url) || /\.(mp4|webm|mov|mkv)(\?|$)/i.test(url)) videoUrls.push(url)
+    else if (isCloudinaryRawUrl(url) || /\.(pdf|docx?|xlsx?|pptx?|txt|zip|rar)(\?|$)/i.test(url)) documentUrls.push(url)
+  }
+
+  const dedupImageUrls = Array.from(new Set(imageUrls))
+  const dedupVideoUrls = Array.from(new Set(videoUrls))
+  const dedupDocumentUrls = Array.from(new Set(documentUrls))
+  const mediaUrls = [...dedupImageUrls, ...dedupVideoUrls]
   return {
     id: raw.postId ?? raw.id,
     content: raw.content ?? '',
-    images,
+    imageUrls: dedupImageUrls,
+    videoUrls: dedupVideoUrls,
+    documentUrls: dedupDocumentUrls,
+    mediaUrls,
+    images: dedupImageUrls,
     privacy: raw.visibility ?? raw.privacy ?? 'PUBLIC',
     authorId: raw.author?.userId ?? raw.authorId ?? '',
     author: author
@@ -106,10 +152,21 @@ export const postsApi = {
     return { ...res.data, data: (res.data.data ?? []).map(normalizePost) }
   },
 
-  createPost: async (data: { content: string; images?: string[]; privacy?: string; groupId?: string }) => {
+  createPost: async (data: {
+    content: string
+    imageUrls?: string[]
+    videoUrls?: string[]
+    documentUrls?: string[]
+    images?: string[]
+    privacy?: string
+    groupId?: string
+  }) => {
+    const imageUrls = data.imageUrls ?? data.images
     const payload = {
       content: data.content,
-      mediaUrls: data.images,
+      imageUrls,
+      videoUrls: data.videoUrls,
+      documentUrls: data.documentUrls,
       visibility: data.privacy,
       groupId: data.groupId,
     }
@@ -122,10 +179,16 @@ export const postsApi = {
     return normalizePost(res.data.data)
   },
 
-  updatePost: async (id: string, data: Partial<{ content: string; images: string[]; privacy: string }>) => {
+  updatePost: async (
+    id: string,
+    data: Partial<{ content: string; imageUrls: string[]; videoUrls: string[]; documentUrls: string[]; images: string[]; privacy: string }>
+  ) => {
+    const imageUrls = data.imageUrls ?? data.images
     const payload = {
       content: data.content,
-      mediaUrls: data.images,
+      imageUrls,
+      videoUrls: data.videoUrls,
+      documentUrls: data.documentUrls,
       visibility: data.privacy,
     }
     const res = await apiClient.put<ApiResponse<any>>(`/posts/${id}`, payload)
@@ -172,6 +235,11 @@ export const postsApi = {
   createComment: async (postId: string, data: { content: string; parentId?: string }) => {
     const res = await apiClient.post<ApiResponse<any>>(`/comments/${postId}`, data)
     return normalizeComment(res.data.data)
+  },
+
+  getPostIdByComment: async (commentId: string) => {
+    const res = await apiClient.get<ApiResponse<{ postId: string | null }>>(`/comments/post-id/${commentId}`)
+    return res.data.data?.postId ?? null
   },
 
   deleteComment: (commentId: string) => apiClient.delete(`/comments/${commentId}`),

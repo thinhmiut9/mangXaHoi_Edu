@@ -52,6 +52,7 @@ export default {
       },
       fontFamily: {
         sans: [
+          'Be Vietnam Pro',
           'Inter',
           '-apple-system',
           'BlinkMacSystemFont',

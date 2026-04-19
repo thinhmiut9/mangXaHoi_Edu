@@ -31,10 +31,31 @@ export const friendsController = {
     } catch (err) { next(err) }
   },
 
+  async getBlockedUsers(req: Request, res: Response, next: NextFunction) {
+    try {
+      const users = await friendsService.getBlockedUsers(req.user!.userId)
+      sendSuccess(res, users)
+    } catch (err) { next(err) }
+  },
+
   async sendRequest(req: Request, res: Response, next: NextFunction) {
     try {
       await friendsService.sendRequest(req.user!.userId, String(req.params.userId))
       sendSuccess(res, null, 'Đã gửi lời mời kết bạn')
+    } catch (err) { next(err) }
+  },
+
+  async blockUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      await friendsService.blockUser(req.user!.userId, String(req.params.userId))
+      sendSuccess(res, null, 'Đã chặn người dùng')
+    } catch (err) { next(err) }
+  },
+
+  async unblockUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      await friendsService.unblockUser(req.user!.userId, String(req.params.userId))
+      sendSuccess(res, null, 'Đã bỏ chặn người dùng')
     } catch (err) { next(err) }
   },
 

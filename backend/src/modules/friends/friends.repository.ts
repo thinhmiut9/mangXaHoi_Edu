@@ -2,13 +2,22 @@ import { runQuery, runQueryOne } from '../../config/neo4j'
 import { User, UserPublic, FriendStatus } from '../../types'
 
 export const friendsRepository = {
+  async isBlockedBetween(userId: string, targetId: string): Promise<boolean> {
+    const result = await runQueryOne<{ blocked: boolean }>(
+      `MATCH (u:User {userId: $userId}), (t:User {userId: $targetId})
+       RETURN EXISTS((u)-[:BLOCKED]->(t)) OR EXISTS((t)-[:BLOCKED]->(u)) AS blocked`,
+      { userId, targetId }
+    )
+    return !!result?.blocked
+  },
+
   async getStatus(userId: string, targetId: string): Promise<{ status: FriendStatus | 'PENDING_RECEIVED' | null; direction: 'sent' | 'received' | null }> {
     const result = await runQueryOne<{ status: string; direction: string }>(
       `MATCH (u:User {userId: $userId})
        OPTIONAL MATCH (u)-[r:REQUESTED]->(t:User {userId: $targetId})
        OPTIONAL MATCH (t)-[r2:REQUESTED]->(u)
        OPTIONAL MATCH (u)-[f]-(t)
-       WHERE type(f) IN ['FRIENDS_WITH', 'FRIEND_WITH']
+       WHERE type(f) IN ['FRIENDS_WITH']
        RETURN
          CASE
             WHEN f IS NOT NULL THEN 'ACCEPTED'
@@ -55,7 +64,7 @@ export const friendsRepository = {
   async unfriend(userId: string, targetId: string): Promise<void> {
     await runQuery(
       `MATCH (u:User {userId: $userId})-[r]-(t:User {userId: $targetId})
-       WHERE type(r) IN ['FRIENDS_WITH', 'FRIEND_WITH']
+       WHERE type(r) IN ['FRIENDS_WITH']
        DELETE r`,
       { userId, targetId }
     )
@@ -64,7 +73,7 @@ export const friendsRepository = {
   async getFriends(userId: string, skip = 0, limit = 20): Promise<UserPublic[]> {
     const results = await runQuery<{ f: { properties: UserPublic } }>(
       `MATCH (u:User {userId: $userId})-[r]-(f:User)
-       WHERE type(r) IN ['FRIENDS_WITH', 'FRIEND_WITH']
+       WHERE type(r) IN ['FRIENDS_WITH']
          AND coalesce(f.role, 'USER') <> 'ADMIN'
        WITH DISTINCT f
        RETURN f ORDER BY f.displayName SKIP toInteger($skip) LIMIT toInteger($limit)`,
@@ -104,13 +113,15 @@ export const friendsRepository = {
   async getSuggestions(userId: string, limit = 10): Promise<UserPublic[]> {
     const results = await runQuery<{ suggested: { properties: UserPublic }; mutualCount: number }>(
       `MATCH (me:User {userId: $userId})-[r1]-(friend:User)-[r2]-(suggested:User)
-       WHERE type(r1) IN ['FRIENDS_WITH', 'FRIEND_WITH']
-         AND type(r2) IN ['FRIENDS_WITH', 'FRIEND_WITH']
+       WHERE type(r1) IN ['FRIENDS_WITH']
+         AND type(r2) IN ['FRIENDS_WITH']
          AND suggested.userId <> $userId
          AND coalesce(suggested.role, 'USER') <> 'ADMIN'
+         AND NOT EXISTS((me)-[:BLOCKED]->(suggested))
+         AND NOT EXISTS((suggested)-[:BLOCKED]->(me))
          AND NOT EXISTS {
            MATCH (me)-[rf]-(suggested)
-           WHERE type(rf) IN ['FRIENDS_WITH', 'FRIEND_WITH']
+           WHERE type(rf) IN ['FRIENDS_WITH']
          }
          AND NOT (me)-[:REQUESTED]-(suggested)
          AND suggested.status = 'ACTIVE'
@@ -124,7 +135,7 @@ export const friendsRepository = {
   async countFriends(userId: string): Promise<number> {
     const result = await runQueryOne<{ count: number }>(
       `MATCH (u:User {userId: $userId})-[r]-(f:User)
-       WHERE type(r) IN ['FRIENDS_WITH', 'FRIEND_WITH']
+       WHERE type(r) IN ['FRIENDS_WITH']
          AND coalesce(f.role, 'USER') <> 'ADMIN'
        RETURN count(*) AS count`,
       { userId }
@@ -135,13 +146,46 @@ export const friendsRepository = {
   async getFriendIds(userId: string): Promise<string[]> {
     const results = await runQuery<{ friendId: string }>(
       `MATCH (u:User {userId: $userId})-[r]-(f:User)
-       WHERE type(r) IN ['FRIENDS_WITH', 'FRIEND_WITH']
+       WHERE type(r) IN ['FRIENDS_WITH']
          AND coalesce(f.role, 'USER') <> 'ADMIN'
        RETURN f.userId AS friendId`,
       { userId }
     )
     return results.map(r => r.friendId)
   },
+
+  async blockUser(userId: string, targetId: string): Promise<void> {
+    const now = new Date().toISOString()
+    await runQuery(
+      `MATCH (u:User {userId: $userId}), (t:User {userId: $targetId})
+       MERGE (u)-[b:BLOCKED]->(t)
+       ON CREATE SET b.createdAt = $now
+       WITH u, t
+       OPTIONAL MATCH (u)-[f]-(t)
+       WHERE type(f) IN ['FRIENDS_WITH', 'REQUESTED']
+       DELETE f`,
+      { userId, targetId, now }
+    )
+  },
+
+  async unblockUser(userId: string, targetId: string): Promise<void> {
+    await runQuery(
+      `MATCH (u:User {userId: $userId})-[b:BLOCKED]->(t:User {userId: $targetId})
+       DELETE b`,
+      { userId, targetId }
+    )
+  },
+
+  async getBlockedUsers(userId: string): Promise<UserPublic[]> {
+    const results = await runQuery<{ u: { properties: UserPublic } }>(
+      `MATCH (:User {userId: $userId})-[:BLOCKED]->(u:User)
+       RETURN u
+       ORDER BY coalesce(u.displayName, '') ASC`,
+      { userId }
+    )
+    return results.map(r => r.u.properties)
+  },
 }
+
 
 

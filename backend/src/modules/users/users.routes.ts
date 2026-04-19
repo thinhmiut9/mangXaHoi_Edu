@@ -8,6 +8,7 @@ const router = Router()
 
 router.get('/search', requireAuth, validate(searchUsersSchema, 'query'), usersController.searchUsers)
 router.get('/search-all', requireAuth, validate(searchAllSchema, 'query'), usersController.searchAll)
+router.get('/mention-search', requireAuth, usersController.mentionSearch)
 router.get('/username/:username', requireAuth, usersController.getProfileByUsername)
 router.get('/:id/friends', requireAuth, usersController.getUserFriends)
 router.get('/:id', requireAuth, usersController.getProfile)

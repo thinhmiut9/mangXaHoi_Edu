@@ -9,5 +9,6 @@ router.use(requireAuth, uploadLimiter)
 router.post('/image', uploadsController.uploadImage)
 router.post('/video', uploadsController.uploadVideo)
 router.post('/avatar', uploadsController.uploadAvatar)
+router.post('/document', uploadsController.uploadDocument)
 
 export default router

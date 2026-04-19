@@ -38,5 +38,14 @@ export const commentsController = {
       sendSuccess(res, result)
     } catch (err) { next(err) }
   },
+
+  async getPostId(req: Request, res: Response, next: NextFunction) {
+    try {
+      // Direct repo call because it is a simple getter
+      const { commentsRepository } = await import('./comments.repository')
+      const postId = await commentsRepository.getPostIdByCommentId(String(req.params.id))
+      sendSuccess(res, { postId })
+    } catch (err) { next(err) }
+  },
 }
 

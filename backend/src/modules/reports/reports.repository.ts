@@ -99,7 +99,10 @@ export const reportsRepository = {
            content: coalesce(targetNode.content, targetNode.description, ''),
            name: coalesce(targetNode.name, targetNode.displayName, ''),
            avatarUrl: targetNode.avatarUrl,
-           mediaUrls: coalesce(targetNode.mediaUrls, []),
+           mediaUrls: coalesce(
+             targetNode.mediaUrls,
+             coalesce(targetNode.imageUrls, []) + coalesce(targetNode.videoUrls, []) + coalesce(targetNode.documentUrls, [])
+           ),
            visibility: coalesce(targetNode.visibility, targetNode.privacy, ''),
            createdAt: coalesce(toString(targetNode.createdAt), ''),
            author: CASE
@@ -177,7 +180,10 @@ export const reportsRepository = {
            content: coalesce(targetNode.content, targetNode.description, ''),
            name: coalesce(targetNode.name, targetNode.displayName, ''),
            avatarUrl: targetNode.avatarUrl,
-           mediaUrls: coalesce(targetNode.mediaUrls, []),
+           mediaUrls: coalesce(
+             targetNode.mediaUrls,
+             coalesce(targetNode.imageUrls, []) + coalesce(targetNode.videoUrls, []) + coalesce(targetNode.documentUrls, [])
+           ),
            visibility: coalesce(targetNode.visibility, targetNode.privacy, ''),
            createdAt: coalesce(toString(targetNode.createdAt), ''),
            author: CASE

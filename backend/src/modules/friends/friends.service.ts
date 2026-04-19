@@ -19,8 +19,14 @@ export const friendsService = {
     return friendsRepository.getSuggestions(userId)
   },
 
+  async getBlockedUsers(userId: string) {
+    return friendsRepository.getBlockedUsers(userId)
+  },
+
   async sendRequest(userId: string, targetId: string) {
     if (userId === targetId) throw new AppError('Khong the ket ban voi chinh minh', 400)
+    const isBlocked = await friendsRepository.isBlockedBetween(userId, targetId)
+    if (isBlocked) throw new AppError('Khong the ket ban do da bi chan', 403)
     const { status } = await friendsRepository.getStatus(userId, targetId)
     if (status === 'ACCEPTED') throw new AppError('Da la ban be', 409)
     if (status === 'PENDING') throw new AppError('Da gui loi moi ket ban', 409)
@@ -38,6 +44,8 @@ export const friendsService = {
   },
 
   async acceptRequest(userId: string, requesterId: string) {
+    const isBlocked = await friendsRepository.isBlockedBetween(userId, requesterId)
+    if (isBlocked) throw new AppError('Khong the chap nhan do da bi chan', 403)
     await friendsRepository.acceptRequest(userId, requesterId)
     await notificationsService.push({
       recipientId: requesterId,
@@ -59,6 +67,16 @@ export const friendsService = {
 
   async unfriend(userId: string, targetId: string) {
     await friendsRepository.unfriend(userId, targetId)
+  },
+
+  async blockUser(userId: string, targetId: string) {
+    if (userId === targetId) throw new AppError('Khong the chan chinh minh', 400)
+    await friendsRepository.blockUser(userId, targetId)
+  },
+
+  async unblockUser(userId: string, targetId: string) {
+    if (userId === targetId) throw new AppError('Khong the bo chan chinh minh', 400)
+    await friendsRepository.unblockUser(userId, targetId)
   },
 
   async getStatus(userId: string, targetId: string) {

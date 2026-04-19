@@ -1,13 +1,16 @@
 ﻿import { z } from 'zod'
-import { isCloudinaryImageUrl } from '../../utils/cloudinary'
+import { isCloudinaryMediaUrl } from '../../utils/cloudinary'
 
 const cloudinaryUrlSchema = z
   .string()
-  .url('URL ảnh không hợp lệ')
-  .refine(isCloudinaryImageUrl, 'Chỉ chấp nhận ảnh đã tải lên Cloudinary')
+  .url('URL media không hợp lệ')
+  .refine(isCloudinaryMediaUrl, 'Chỉ chấp nhận media đã tải lên Cloudinary')
 
 export const createPostSchema = z.object({
   content: z.string().min(1, 'Nội dung không được trống').max(5000),
+  imageUrls: z.array(cloudinaryUrlSchema).max(10).optional(),
+  videoUrls: z.array(cloudinaryUrlSchema).max(4).optional(),
+  documentUrls: z.array(cloudinaryUrlSchema).max(10).optional(),
   mediaUrls: z.array(cloudinaryUrlSchema).max(10).optional(),
   visibility: z.enum(['PUBLIC', 'FRIENDS', 'GROUP', 'PRIVATE']).default('PUBLIC'),
   groupId: z.string().optional(),
@@ -15,6 +18,9 @@ export const createPostSchema = z.object({
 
 export const updatePostSchema = z.object({
   content: z.string().min(1).max(5000).optional(),
+  imageUrls: z.array(cloudinaryUrlSchema).max(10).optional(),
+  videoUrls: z.array(cloudinaryUrlSchema).max(4).optional(),
+  documentUrls: z.array(cloudinaryUrlSchema).max(10).optional(),
   mediaUrls: z.array(cloudinaryUrlSchema).max(10).optional(),
   visibility: z.enum(['PUBLIC', 'FRIENDS', 'GROUP', 'PRIVATE']).optional(),
 })

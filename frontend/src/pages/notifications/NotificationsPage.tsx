@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { chatApi, notificationsApi } from '@/api/index'
+import { postsApi } from '@/api/posts'
 import { useNotificationStore } from '@/store/notificationStore'
 import { Avatar } from '@/components/ui/Avatar'
 import { Spinner } from '@/components/ui/Spinner'
@@ -34,7 +35,7 @@ function isYesterday(date: Date) {
 function mapNotificationType(type: string) {
   if (type.includes('MESSAGE')) return 'MESSAGE'
   if (type.includes('FRIEND') || type.includes('GROUP') || type.includes('ADMIN')) return 'SYSTEM'
-  return 'INTERACTION'
+  return 'INTERACTION' // POST_REACT, POST_COMMENT, NEW_POST, MENTION
 }
 
 function mapNotification(notifications: any[]) {
@@ -154,6 +155,22 @@ export default function NotificationsPage() {
     const entityType = String(notif.entityType || '').toUpperCase()
     const entityId = notif.entityId
 
+    if (notif.type === 'MENTION' && entityType === 'POST' && entityId) {
+      navigate(`/posts/${entityId}`)
+      return
+    }
+    // Fallback cho thông báo cũ có entityType là COMMENT
+    if (entityType === 'COMMENT' && entityId) {
+      try {
+        const postId = await postsApi.getPostIdByComment(entityId)
+        if (postId) {
+          navigate(`/posts/${postId}`)
+          return
+        }
+      } catch (error) {
+        console.error('Không thể lấy postId từ comment:', error)
+      }
+    }
     if (entityType === 'POST' && entityId) {
       navigate(`/posts/${entityId}`)
       return
