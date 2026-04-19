@@ -273,6 +273,19 @@ export const postsService = {
     return postsRepository.toggleSave(postId, userId)
   },
 
+  async togglePin(postId: string, userId: string) {
+    const post = await postsRepository.findById(postId)
+    if (!post) throw new AppError('BÃ i viáº¿t khÃ´ng tá»“n táº¡i', 404, 'POST_NOT_FOUND')
+
+    const isAuthor = await postsRepository.isAuthor(postId, userId)
+    if (!isAuthor) throw new AppError('Báº¡n chá»‰ cÃ³ thá»ƒ ghim bÃ i viáº¿t cá»§a chÃ­nh mÃ¬nh', 403, 'FORBIDDEN')
+
+    const isGroupPost = Boolean(post.groupId && post.groupId !== 'null')
+    if (isGroupPost) throw new AppError('KhÃ´ng thá»ƒ ghim bÃ i viáº¿t nhÃ³m lÃªn trang cÃ¡ nhÃ¢n', 400, 'INVALID_PIN_TARGET')
+
+    return postsRepository.togglePin(postId, userId)
+  },
+
   async sharePost(postId: string, userId: string) {
     const post = await postsRepository.findById(postId)
     if (!post) throw new AppError('Bài viết không tồn tại', 404, 'POST_NOT_FOUND')

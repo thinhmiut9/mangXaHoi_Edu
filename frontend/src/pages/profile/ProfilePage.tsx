@@ -565,7 +565,7 @@ export default function ProfilePage() {
           ) : posts.length === 0 ? (
             <EmptyState title="Chưa có bài viết nào" description="Bài viết sẽ xuất hiện ở đây" icon={<span className="text-3xl">📝</span>} />
           ) : (
-            posts.map((post) => <PostCard key={post.id} post={post} />)
+            posts.map((post) => <PostCard key={post.id} post={post} canPin={isOwnProfile} />)
           )
         )}
 

@@ -4,10 +4,15 @@ import path from 'path'
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') })
 
+// Backward compatibility: some setups use NEO4J_USERNAME instead of NEO4J_USER.
+if (!process.env.NEO4J_USER && process.env.NEO4J_USERNAME) {
+  process.env.NEO4J_USER = process.env.NEO4J_USERNAME
+}
+
 const envSchema = z.object({
   HOST: z.string().default('localhost'),
-  PORT: z.coerce.number().default(5000),
-  APP_URL: z.string().url().default('http://localhost:5000'),
+  PORT: z.coerce.number().default(5001),
+  APP_URL: z.string().url().default('http://localhost:5001'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 
   NEO4J_URI: z.string().min(1, 'NEO4J_URI is required'),

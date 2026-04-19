@@ -53,6 +53,13 @@ export const postsController = {
     } catch (err) { next(err) }
   },
 
+  async togglePin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await postsService.togglePin(String(req.params.id), req.user!.userId)
+      sendSuccess(res, result)
+    } catch (err) { next(err) }
+  },
+
   async sharePost(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await postsService.sharePost(String(req.params.id), req.user!.userId)

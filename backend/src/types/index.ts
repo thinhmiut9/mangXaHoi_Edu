@@ -80,6 +80,8 @@ export interface Post {
   isLiked?: boolean
   isSaved?: boolean
   isShared?: boolean
+  isPinned?: boolean
+  pinnedAt?: string
   createdAt: string
   updatedAt: string
 }

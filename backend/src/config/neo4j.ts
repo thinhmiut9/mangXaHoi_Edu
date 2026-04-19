@@ -10,7 +10,8 @@ export function getDriver(): Driver {
       neo4j.auth.basic(env.NEO4J_USER, env.NEO4J_PASSWORD),
       {
         maxConnectionPoolSize: 50,
-        connectionAcquisitionTimeout: 10000,
+        // Keep acquisition timeout >= connectionTimeout to avoid neo4j-driver warning
+        connectionAcquisitionTimeout: 30000,
         logging: neo4j.logging.console(env.NODE_ENV === 'development' ? 'warn' : 'error'),
       }
     )

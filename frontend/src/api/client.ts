@@ -1,6 +1,6 @@
 import axios, { AxiosError } from 'axios'
 
-const runtimeApiUrl = `${window.location.protocol}//${window.location.hostname}:5000`
+const runtimeApiUrl = `${window.location.protocol}//${window.location.hostname}:5001`
 const envApiUrl = import.meta.env.VITE_API_URL?.trim()
 const API_URL = (envApiUrl ? envApiUrl : runtimeApiUrl).replace(/\/+$/, '')
 

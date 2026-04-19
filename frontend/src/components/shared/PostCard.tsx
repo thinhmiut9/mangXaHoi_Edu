@@ -19,6 +19,7 @@ import { MentionText } from '@/components/ui/MentionText'
 interface PostCardProps {
   post: Post
   showComments?: boolean
+  canPin?: boolean
 }
 
 function isImageLikeUrl(url: string): boolean {
@@ -50,7 +51,7 @@ function getFileExtLabel(url: string): string {
   return name.slice(dot + 1).toUpperCase().slice(0, 5)
 }
 
-export function PostCard({ post, showComments = false }: PostCardProps) {
+export function PostCard({ post, showComments = false, canPin = false }: PostCardProps) {
   const { user } = useAuthStore()
   const toast = useToast()
   const queryClient = useQueryClient()
@@ -95,6 +96,18 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
       toast.success(data.saved ? 'Đã lưu bài viết' : 'Đã bỏ lưu')
       queryClient.invalidateQueries({ queryKey: ['feed'] })
       queryClient.invalidateQueries({ queryKey: ['saved-posts'] })
+    },
+    onError: (err) => toast.error(extractError(err)),
+  })
+
+  const pinMutation = useMutation({
+    mutationFn: () => postsApi.togglePin(post.id),
+    onSuccess: (data) => {
+      toast.success(data.pinned ? 'Đã ghim bài viết lên đầu trang cá nhân' : 'Đã bỏ ghim bài viết')
+      setMenuOpen(false)
+      queryClient.invalidateQueries({ queryKey: ['user-posts'] })
+      queryClient.invalidateQueries({ queryKey: ['profile', post.authorId] })
+      queryClient.invalidateQueries({ queryKey: ['post', post.id] })
     },
     onError: (err) => toast.error(extractError(err)),
   })
@@ -186,6 +199,7 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
   })
 
   const isOwnPost = user?.id === post.authorId
+  const canShowPinAction = canPin && isOwnPost
   const contentHashtags = post.content
     .split(/\s+/)
     .filter((word) => /^#[\p{L}\p{N}_-]+$/u.test(word))
@@ -502,6 +516,18 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
                     >
                       {post.isSaved ? 'Bỏ lưu bài viết' : 'Lưu bài viết'}
                     </button>
+                    {canShowPinAction && (
+                      <button
+                        onClick={() => {
+                          setMenuOpen(false)
+                          pinMutation.mutate()
+                        }}
+                        className="w-full text-left px-4 py-2 hover:bg-hover-bg text-sm text-text-primary"
+                        disabled={pinMutation.isPending}
+                      >
+                        {post.isPinned ? 'Bỏ ghim bài viết' : 'Ghim bài viết'}
+                      </button>
+                    )}
                     <div className="my-1 border-t border-border-light" />
 
                     {isOwnPost || user?.role === 'ADMIN' ? (
@@ -528,6 +554,13 @@ export function PostCard({ post, showComments = false }: PostCardProps) {
 
         </div>
 
+
+        {post.isPinned && (
+          <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+            <span aria-hidden="true">📌</span>
+            <span>Bài viết đã ghim</span>
+          </div>
+        )}
 
         {post.content && (
           <button

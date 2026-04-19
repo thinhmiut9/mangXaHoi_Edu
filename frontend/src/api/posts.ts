@@ -21,6 +21,8 @@ export interface Post {
   isLiked?: boolean
   isSaved?: boolean
   isShared?: boolean
+  isPinned?: boolean
+  pinnedAt?: string
   createdAt: string
   updatedAt: string
 }
@@ -120,6 +122,8 @@ function normalizePost(raw: any): Post {
     isLiked: !!raw.isLiked,
     isSaved: !!raw.isSaved,
     isShared: !!raw.isShared,
+    isPinned: !!raw.isPinned,
+    pinnedAt: raw.pinnedAt ? toIsoString(raw.pinnedAt) : undefined,
     createdAt: toIsoString(raw.createdAt),
     updatedAt: toIsoString(raw.updatedAt),
   }
@@ -205,6 +209,11 @@ export const postsApi = {
 
   toggleSave: (id: string) =>
     apiClient.post<ApiResponse<{ saved: boolean }>>(`/posts/${id}/save`).then(r => r.data.data),
+
+  togglePin: (id: string) =>
+    apiClient.post<ApiResponse<{ pinned: boolean }>>(`/posts/${id}/pin`).then(r => ({
+      pinned: !!r.data.data?.pinned,
+    })),
 
   sharePost: (id: string) =>
     apiClient.post<ApiResponse<{ shared: boolean; sharesCount: unknown }>>(`/posts/${id}/share`).then(r => ({

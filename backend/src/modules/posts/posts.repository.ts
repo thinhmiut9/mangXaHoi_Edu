@@ -17,7 +17,9 @@ export const postsRepository = {
        CREATE (p:Post {
          postId: $postId, content: $content,
          mediaUrls: $mediaUrls,
-         visibility: $visibility, groupId: $groupId, createdAt: $now, updatedAt: $now
+         visibility: $visibility, groupId: $groupId,
+         isPinned: false, pinnedAt: null,
+         createdAt: $now, updatedAt: $now
        })<-[:CREATED]-(u)
        RETURN p`,
       { ...data, groupId: data.groupId ?? null, mediaUrls, now }
@@ -244,7 +246,7 @@ export const postsRepository = {
                COUNT { ()-[:LIKED]->(p) } AS likesCount,
                COUNT { (p)-[:HAS_COMMENT]->() } AS commentsCount,
                COUNT { ()-[:SHARED]->(p) } AS sharesCount
-       ORDER BY p.createdAt DESC
+       ORDER BY coalesce(p.isPinned, false) DESC, coalesce(p.pinnedAt, '') DESC, p.createdAt DESC
        SKIP toInteger($skip) LIMIT toInteger($limit)`,
       { userId, viewerId, skip, limit }
     )
@@ -406,6 +408,47 @@ export const postsRepository = {
       { postId, userId }
     )
     return result ?? { saved: false }
+  },
+
+  async togglePin(postId: string, userId: string): Promise<{ pinned: boolean }> {
+    const now = new Date().toISOString()
+    const row = await runQueryOne<{ currentlyPinned: boolean }>(
+      `MATCH (:User {userId: $userId})-[:CREATED]->(p:Post {postId: $postId})
+       WHERE p.groupId IS NULL OR p.groupId = '' OR p.groupId = 'null'
+       RETURN coalesce(p.isPinned, false) AS currentlyPinned`,
+      { postId, userId }
+    )
+    if (!row) return { pinned: false }
+
+    if (row.currentlyPinned) {
+      await runQuery(
+        `MATCH (:User {userId: $userId})-[:CREATED]->(p:Post {postId: $postId})
+         SET p.isPinned = false,
+             p.pinnedAt = null,
+             p.updatedAt = $now`,
+        { postId, userId, now }
+      )
+      return { pinned: false }
+    }
+
+    await runQuery(
+      `MATCH (:User {userId: $userId})-[:CREATED]->(p:Post)
+       WHERE coalesce(p.isPinned, false) = true
+       SET p.isPinned = false,
+           p.pinnedAt = null,
+           p.updatedAt = $now`,
+      { userId, now }
+    )
+
+    await runQuery(
+      `MATCH (:User {userId: $userId})-[:CREATED]->(p:Post {postId: $postId})
+       SET p.isPinned = true,
+           p.pinnedAt = $now,
+           p.updatedAt = $now`,
+      { postId, userId, now }
+    )
+
+    return { pinned: true }
   },
 
   async sharePost(postId: string, userId: string, sharedPostId: string): Promise<{ shared: boolean; sharesCount: number }> {

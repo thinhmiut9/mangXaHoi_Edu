@@ -1,6 +1,6 @@
 import { io, Socket } from 'socket.io-client'
 
-const runtimeSocketUrl = `${window.location.protocol}//${window.location.hostname}:5000`
+const runtimeSocketUrl = `${window.location.protocol}//${window.location.hostname}:5001`
 const envSocketUrl = import.meta.env.VITE_SOCKET_URL?.trim()
 const SOCKET_URL = (envSocketUrl ? envSocketUrl : runtimeSocketUrl).replace(/\/+$/, '')
 

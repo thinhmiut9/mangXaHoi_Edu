@@ -18,6 +18,7 @@ router.put('/:id', validate(updatePostSchema), postsController.updatePost)
 router.delete('/:id', postsController.deletePost)
 router.post('/:id/like', postsController.toggleLike)
 router.post('/:id/save', postsController.toggleSave)
+router.post('/:id/pin', postsController.togglePin)
 router.post('/:id/share', postsController.sharePost)
 router.get('/:id/reactions', postsController.getReactions)
 
