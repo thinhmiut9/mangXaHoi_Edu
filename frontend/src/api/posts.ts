@@ -70,20 +70,20 @@ function isCloudinaryRawUrl(url: unknown): url is string {
   )
 }
 
+function toStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string' && item.length > 0)
+  }
+  if (typeof value === 'string' && value.length > 0) return [value]
+  return []
+}
+
 function normalizePost(raw: any): Post {
   const author = raw.author ? normalizeUser(raw.author) : null
-  const legacyMediaUrls: string[] = (raw.mediaUrls ?? raw.images ?? []).filter(
-    (url: unknown): url is string => typeof url === 'string' && url.length > 0
-  )
-  const imageUrls: string[] = (raw.imageUrls ?? []).filter(
-    (url: unknown): url is string => typeof url === 'string' && url.length > 0
-  )
-  const videoUrls: string[] = (raw.videoUrls ?? []).filter(
-    (url: unknown): url is string => typeof url === 'string' && url.length > 0
-  )
-  const documentUrls: string[] = (raw.documentUrls ?? []).filter(
-    (url: unknown): url is string => typeof url === 'string' && url.length > 0
-  )
+  const legacyMediaUrls: string[] = toStringArray(raw.mediaUrls ?? raw.images)
+  const imageUrls: string[] = toStringArray(raw.imageUrls)
+  const videoUrls: string[] = toStringArray(raw.videoUrls)
+  const documentUrls: string[] = toStringArray(raw.documentUrls)
 
   for (const url of legacyMediaUrls) {
     if (isCloudinaryImageUrl(url) || /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(url)) imageUrls.push(url)

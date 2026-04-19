@@ -39,8 +39,12 @@ export default function UserLayout() {
   const topPaddingClass = isChatPage ? 'pt-[56px]' : 'pt-[var(--topbar-height)]'
   const toast = useToast()
   const navigate = useNavigate()
+  const [isXlUp, setIsXlUp] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(min-width: 1280px)').matches : false
+  )
   // Dùng ref để tránh đưa location.pathname vào dependency array của socket effect
   const pathnameRef = useRef(location.pathname)
+  const lastUnreadRefetchAtRef = useRef(0)
   const [incomingCallPopup, setIncomingCallPopup] = useState<IncomingCallPopupState | null>(null)
 
   const { data: unreadSummary, refetch: refetchUnreadSummary } = useQuery({
@@ -55,6 +59,14 @@ export default function UserLayout() {
     setUnreadSummary(unreadSummary)
   }, [unreadSummary, setUnreadSummary])
 
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1280px)')
+    const onChange = (event: MediaQueryListEvent) => setIsXlUp(event.matches)
+    setIsXlUp(media.matches)
+    media.addEventListener('change', onChange)
+    return () => media.removeEventListener('change', onChange)
+  }, [])
+
   // Cập nhật ref mỗi khi pathname thay đổi mà không trigger socket effect
   useEffect(() => {
     pathnameRef.current = location.pathname
@@ -63,19 +75,25 @@ export default function UserLayout() {
   useEffect(() => {
     if (!token) return
     const socket = connectSocket(token)
+    const refetchUnreadSummaryThrottled = () => {
+      const now = Date.now()
+      if (now - lastUnreadRefetchAtRef.current < 2500) return
+      lastUnreadRefetchAtRef.current = now
+      refetchUnreadSummary()
+    }
 
     const handleNewNotification = (notification: Notification) => {
       addNotification(notification)
-      refetchUnreadSummary()
+      refetchUnreadSummaryThrottled()
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
     }
 
     const handleNewMessage = () => {
-      refetchUnreadSummary()
+      refetchUnreadSummaryThrottled()
     }
 
     const handleConnect = () => {
-      refetchUnreadSummary()
+      refetchUnreadSummaryThrottled()
     }
 
     const handleIncomingCall = (payload: IncomingCallPopupState) => {
@@ -172,8 +190,8 @@ export default function UserLayout() {
         </main>
 
         {/* Right Panel */}
-        {shouldShowRightPanel && (
-          <aside className="hidden xl:flex flex-col fixed right-0 top-[var(--topbar-height)] bottom-0 w-[320px] overflow-y-auto p-3 border-l border-border-light bg-white/85 backdrop-blur-md">
+        {shouldShowRightPanel && isXlUp && (
+          <aside className="flex flex-col fixed right-0 top-[var(--topbar-height)] bottom-0 w-[320px] overflow-y-auto p-3 border-l border-border-light bg-white/85 backdrop-blur-md">
             <RightPanel />
           </aside>
         )}
@@ -206,3 +224,11 @@ export default function UserLayout() {
     </div>
   )
 }
+
+
+
+
+
+
+
+

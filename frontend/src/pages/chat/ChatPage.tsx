@@ -71,12 +71,12 @@ export default function ChatPage() {
   const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([])
   const toast = useToast()
 
-  const { data: conversations, isLoading: convsLoading } = useQuery({
+  const { data: conversations, isLoading: convsLoading, isError: convsError, refetch: refetchConversations } = useQuery({
     queryKey: ['conversations'],
     queryFn: chatApi.getConversations,
   })
 
-  const { data: messages, isLoading: msgsLoading } = useQuery({
+  const { data: messages, isLoading: msgsLoading, isError: msgsError, refetch: refetchMessages } = useQuery({
     queryKey: ['messages', activeConvId],
     queryFn: () => chatApi.getMessages(activeConvId!),
     enabled: !!activeConvId,
@@ -550,7 +550,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="px-4 py-4 lg:px-6 lg:py-6 flex h-[calc(100dvh-56px)] max-h-[calc(100dvh-56px)] bg-[#F5F7FA] gap-3 md:gap-4 overflow-hidden">
+    <div className="px-0 py-0 md:px-4 md:py-4 lg:px-6 lg:py-6 flex h-[calc(100dvh-56px)] max-h-[calc(100dvh-56px)] bg-[#F5F7FA] gap-0 md:gap-4 overflow-hidden">
       
       {/* COLUMN 1: Chat List */}
       <div className={cn('w-full md:w-[340px] lg:w-[360px] flex-shrink-0 flex flex-col', activeConvId ? 'hidden md:flex' : 'flex')}>
@@ -674,6 +674,13 @@ export default function ChatPage() {
         <div className="flex-1 overflow-y-auto space-y-3 pr-2 pb-4 scrollbar-thin">
           {convsLoading ? (
             <div className="flex justify-center py-8"><Spinner /></div>
+          ) : convsError ? (
+            <div className="py-8 px-2 space-y-3 text-center">
+              <p className="text-sm text-gray-600">Không tải được danh sách tin nhắn.</p>
+              <Button variant="secondary" size="sm" onClick={() => refetchConversations()}>
+                Thử lại
+              </Button>
+            </div>
           ) : !conversationList.length ? (
             <div className="py-8"><EmptyState title="Trống" icon={<span className="text-3xl opacity-80">💬</span>} /></div>
           ) : (
@@ -798,29 +805,30 @@ export default function ChatPage() {
 
       {/* COLUMN 2: Chat Window */}
       {activeConvId ? (
-        <div className={cn('relative flex-1 min-w-0 bg-white rounded-[24px] shadow-sm ring-1 ring-gray-100 flex flex-col overflow-hidden', !activeConvId ? 'hidden md:flex' : 'flex')}>
+        <div className={cn('relative flex-1 w-full min-w-0 min-h-0 bg-white rounded-none md:rounded-[24px] md:shadow-sm md:ring-1 md:ring-gray-100 flex flex-col overflow-hidden', !activeConvId ? 'hidden md:flex' : 'flex')}>
           {/* Header */}
-          <div className="flex items-center justify-between gap-3 px-4 lg:px-6 py-4 border-b border-gray-100/80 bg-white/80 backdrop-blur-sm z-10">
-            <div className="flex min-w-0 items-center gap-3.5">
+          <div className="flex items-center justify-between gap-2 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 border-b border-gray-100/80 bg-white/80 backdrop-blur-sm z-10">
+            <div className="flex min-w-0 items-center gap-2.5 sm:gap-3.5">
               <button className="md:hidden p-2 -ml-2 text-gray-400 hover:bg-gray-100 rounded-full" onClick={() => setActiveConvId(undefined)}>
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"></path></svg>
               </button>
               <Avatar src={otherParticipant?.avatar} name={otherParticipant?.displayName ?? ''} size="md" online={true} />
               <div className="min-w-0">
-                <h3 className="truncate font-bold text-[17px] text-gray-900 leading-tight">{otherParticipant?.displayName}</h3>
+                <h3 className="truncate font-bold text-[16px] sm:text-[17px] text-gray-900 leading-tight">{otherParticipant?.displayName}</h3>
                 {otherTyping ? (
-                  <p className="truncate text-[13px] text-primary-500 font-medium animate-pulse mt-0.5">Đang nhập tin nhắn...</p>
+                  <p className="truncate max-w-[170px] sm:max-w-none text-[12px] sm:text-[13px] text-primary-500 font-medium animate-pulse mt-0.5">Đang nhập tin nhắn...</p>
                 ) : (
-                  <p className="truncate text-[13px] text-success-500 font-medium mt-0.5">Đang hoạt động - Phản hồi rất nhanh</p>
+                  <p className="truncate max-w-[170px] sm:max-w-none text-[12px] sm:text-[13px] text-success-500 font-medium mt-0.5">Đang hoạt động - Phản hồi rất nhanh</p>
                 )}
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-1.5 lg:gap-2">
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-1.5 lg:gap-2">
               <button
                 onClick={() => void startVoiceCall()}
                 disabled={callStatus !== 'idle'}
+                aria-label="Gọi thoại"
                 className={cn(
-                  "hidden sm:inline-flex items-center gap-2 h-10 lg:h-11 px-3 lg:px-4 rounded-full text-[13px] font-semibold transition-colors whitespace-nowrap",
+                  "inline-flex items-center justify-center h-10 w-10 sm:h-10 sm:w-auto sm:px-3 lg:h-11 lg:px-4 rounded-full text-[13px] font-semibold transition-colors whitespace-nowrap ring-1 ring-gray-200/70",
                   callStatus === 'idle'
                     ? "bg-gray-50 hover:bg-gray-100 text-gray-700"
                     : "bg-gray-100 text-gray-400 cursor-not-allowed"
@@ -830,18 +838,11 @@ export default function ChatPage() {
                 <span className="hidden 2xl:inline">Gọi thoại</span>
               </button>
               <button
-                onClick={() => toast.info(`Đang gọi video với ${otherParticipant?.displayName ?? 'người dùng'}...`)}
-                className="hidden sm:inline-flex items-center gap-2 h-10 lg:h-11 px-3 lg:px-4 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-full text-[13px] font-semibold transition-colors whitespace-nowrap"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                <span className="hidden 2xl:inline">Gọi video</span>
-              </button>
-              <button
                 onClick={() => {
                   if (!otherParticipant?.id) return
                   navigate(`/profile/${otherParticipant.id}`)
                 }}
-                className="inline-flex items-center justify-center h-10 lg:h-11 px-3 lg:px-4 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-full text-[13px] font-semibold transition-colors whitespace-nowrap"
+                className="hidden sm:inline-flex items-center justify-center h-10 lg:h-11 px-3 lg:px-4 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-full text-[13px] font-semibold transition-colors whitespace-nowrap"
               >
                  <span className="hidden 2xl:inline">Xem hồ sơ</span>
                  <svg className="w-5 h-5 sm:hidden" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -849,8 +850,9 @@ export default function ChatPage() {
               </button>
               <button
                 onClick={() => setShowInfoPanel(v => !v)}
-                className="inline-flex items-center justify-center h-10 w-10 lg:h-11 lg:w-11 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-full transition-colors"
+                className="inline-flex items-center justify-center h-10 w-10 sm:h-10 sm:w-10 lg:h-11 lg:w-11 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-full transition-colors ring-1 ring-gray-200/70"
                 title="Tùy chọn"
+                aria-label="Mở tùy chọn"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6h.01M12 12h.01M12 18h.01" />
@@ -861,7 +863,14 @@ export default function ChatPage() {
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-white/50">
-            {msgsLoading ? <div className="flex justify-center py-10"><Spinner /></div> : (
+            {msgsLoading ? <div className="flex justify-center py-10"><Spinner /></div> : msgsError ? (
+              <div className="py-8 px-2 space-y-3 text-center">
+                <p className="text-sm text-gray-600">Không tải được nội dung cuộc trò chuyện.</p>
+                <Button variant="secondary" size="sm" onClick={() => refetchMessages()}>
+                  Thử lại
+                </Button>
+              </div>
+            ) : (
               messages?.map((msg, idx) => {
                 const isOwn = msg.senderId === user?.id
                 // just a mock timestamp
@@ -1013,6 +1022,53 @@ export default function ChatPage() {
                 </div>
               </div>
             </>
+          )}
+
+          {showInfoPanel && activeConvId && otherParticipant && (
+            <Modal
+              open={showInfoPanel}
+              onClose={() => setShowInfoPanel(false)}
+              title="Tùy chọn cuộc trò chuyện"
+              size="sm"
+            >
+              <div className="space-y-2 lg:hidden">
+                <button
+                  onClick={() => {
+                    setShowInfoPanel(false)
+                    navigate(`/profile/${otherParticipant.id}`)
+                  }}
+                  className="w-full rounded-xl bg-gray-50 hover:bg-gray-100 px-3 py-2.5 text-left text-sm font-semibold text-gray-700"
+                >
+                  Xem trang cá nhân
+                </button>
+                <button
+                  onClick={() => {
+                    setShowInfoPanel(false)
+                    setMutedConversationIds((prev) => {
+                      const next = { ...prev, [activeConvId]: !prev[activeConvId] }
+                      toast.success(next[activeConvId] ? 'Đã tắt thông báo cuộc trò chuyện' : 'Đã bật lại thông báo cuộc trò chuyện')
+                      return next
+                    })
+                  }}
+                  className="w-full rounded-xl bg-gray-50 hover:bg-gray-100 px-3 py-2.5 text-left text-sm font-semibold text-gray-700"
+                >
+                  {mutedConversationIds[activeConvId] ? 'Bật thông báo' : 'Tắt thông báo'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowInfoPanel(false)
+                    const keyword = window.prompt('Nhập từ khóa cần tìm trong cuộc chat:')
+                    if (!keyword) return
+                    const found = (messages ?? []).find((m) => m.content?.toLowerCase().includes(keyword.toLowerCase()))
+                    if (!found) return toast.info('Không tìm thấy nội dung phù hợp')
+                    toast.success('Đã tìm thấy trong cuộc trò chuyện')
+                  }}
+                  className="w-full rounded-xl bg-gray-50 hover:bg-gray-100 px-3 py-2.5 text-left text-sm font-semibold text-gray-700"
+                >
+                  Tìm trong chat
+                </button>
+              </div>
+            </Modal>
           )}
         </div>
       ) : (
