@@ -4,7 +4,6 @@ import { z } from 'zod'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { authApi } from '@/api/auth'
-import { useAuthStore } from '@/store/authStore'
 import { useToast } from '@/components/ui/Toast'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
@@ -12,8 +11,6 @@ import { extractError } from '@/api/client'
 
 const schema = z.object({
   displayName: z.string().min(2, 'Tên tối thiểu 2 ký tự').max(50),
-  username: z.string().min(3, 'Username tối thiểu 3 ký tự').max(30)
-    .regex(/^[a-zA-Z0-9_]+$/, 'Chỉ chứa chữ, số, dấu gạch dưới'),
   email: z.string().email('Email không hợp lệ'),
   password: z.string().min(8, 'Tối thiểu 8 ký tự')
     .regex(/[A-Z]/, 'Phải có ít nhất 1 chữ hoa')
@@ -28,7 +25,6 @@ type FormValues = z.infer<typeof schema>
 
 export default function RegisterPage() {
   const navigate = useNavigate()
-  const { setAuth } = useAuthStore()
   const toast = useToast()
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
@@ -38,10 +34,9 @@ export default function RegisterPage() {
 
   const mutation = useMutation({
     mutationFn: (data: Omit<FormValues, 'confirmPassword'>) => authApi.register(data),
-    onSuccess: (data) => {
-      setAuth(data.user, data.token)
+    onSuccess: () => {
       toast.success('Đăng ký thành công! Chào mừng đến EduSocial 🎉')
-      navigate('/')
+      navigate('/login')
     },
     onError: (err) => toast.error(extractError(err)),
   })
@@ -66,7 +61,6 @@ export default function RegisterPage() {
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
             <Input label="Họ và tên" placeholder="Nguyễn Văn A" error={errors.displayName?.message} fullWidth {...register('displayName')} />
-            <Input label="Username" placeholder="nguyen_van_a" error={errors.username?.message} fullWidth {...register('username')} />
             <Input label="Email" type="email" placeholder="example@email.com" error={errors.email?.message} fullWidth {...register('email')} />
             <Input label="Mật khẩu" type="password" placeholder="••••••••" error={errors.password?.message} fullWidth hint="Tối thiểu 8 ký tự, có chữ hoa và chữ số" {...register('password')} />
             <Input label="Xác nhận mật khẩu" type="password" placeholder="••••••••" error={errors.confirmPassword?.message} fullWidth {...register('confirmPassword')} />
@@ -85,3 +79,4 @@ export default function RegisterPage() {
     </div>
   )
 }
+

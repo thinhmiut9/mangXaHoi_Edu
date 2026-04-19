@@ -15,6 +15,9 @@ import { PostCard } from '@/components/shared/PostCard'
 import { Modal } from '@/components/ui/Modal'
 import { MentionTextarea } from '@/components/ui/MentionTextarea'
 
+const PULL_TO_REFRESH_TRIGGER = 72
+const PULL_TO_REFRESH_MAX = 96
+
 function PostComposer() {
   const { user } = useAuthStore()
   const [composerOpen, setComposerOpen] = useState(false)
@@ -62,6 +65,13 @@ function PostComposer() {
   })
 
   const onPickFiles = () => fileInputRef.current?.click()
+  const onInsertTag = () => {
+    setContent((prev) => {
+      const trimmed = prev.trimEnd()
+      if (!trimmed) return '@'
+      return `${trimmed} @`
+    })
+  }
 
   const onFilesSelected = (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
@@ -122,57 +132,67 @@ function PostComposer() {
       <Modal
         open={composerOpen}
         onClose={() => setComposerOpen(false)}
-        title="Tạo bài viết mới"
+        title="Tạo bài viết"
         size="xl"
-        footer={(
-          <>
-            <Button variant="secondary" onClick={() => setComposerOpen(false)} disabled={mutation.isPending}>
-              Hủy
-            </Button>
-            <Button
-              onClick={() => mutation.mutate()}
-              loading={mutation.isPending}
-              disabled={!content.trim() || mutation.isPending}
-            >
-              Đăng
-            </Button>
-          </>
-        )}
       >
         <div className="space-y-4">
-          <div className="rounded-2xl border border-border-light bg-app-bg/60 px-3 py-2.5 flex items-center gap-3">
+          <div className="flex items-start gap-3">
             <Avatar src={user?.avatar} name={user?.displayName ?? ''} size="md" />
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-text-primary truncate">{user?.displayName}</p>
-              <p className="text-xs text-text-secondary">Chia sẻ cập nhật với bạn bè của bạn</p>
+              <p className="text-base font-semibold text-text-primary truncate">{user?.displayName}</p>
+              <select
+                value={privacy}
+                onChange={e => setPrivacy(e.target.value as typeof privacy)}
+                className="mt-1 text-xs bg-app-bg border border-border-light rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                aria-label="Quyền riêng tư"
+              >
+                <option value="PUBLIC">Công khai</option>
+                <option value="FRIENDS">Bạn bè</option>
+                <option value="PRIVATE">Chỉ mình tôi</option>
+              </select>
             </div>
           </div>
 
-          <div className="flex items-start gap-3">
-            <Avatar src={user?.avatar} name={user?.displayName ?? ''} size="md" className="mt-1" />
+          <div className="rounded-xl border border-border-light px-1 py-1">
             <MentionTextarea
               value={content}
               onChange={setContent}
-              placeholder={`${user?.displayName} ơi, bạn đang nghĩ gì?`}
-              className="flex-1 min-h-[150px] bg-white rounded-2xl px-4 py-3 text-sm resize-none border border-border-light focus:outline-none focus:ring-2 focus:ring-primary-300"
-              rows={5}
+              placeholder={`${user?.displayName} ơi, bạn đang nghĩ gì thế?`}
+              className="w-full min-h-[150px] bg-white rounded-xl px-3 py-2 text-3xl leading-tight resize-none border-0 focus:outline-none focus:ring-0"
+              rows={4}
               aria-label="Viết bài"
             />
           </div>
 
-          <div className="rounded-2xl border border-border-light bg-white p-3">
-            <div className="flex items-center justify-between gap-2">
-              <select
-                value={privacy}
-                onChange={e => setPrivacy(e.target.value as typeof privacy)}
-                className="text-sm bg-app-bg border border-border-light rounded-full px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-300"
-                aria-label="Quyền riêng tư"
-              >
-                <option value="PUBLIC">🌍 Công khai</option>
-                <option value="FRIENDS">👥 Bạn bè</option>
-                <option value="PRIVATE">🔒 Chỉ mình tôi</option>
-              </select>
-              <Button variant="secondary" size="sm" onClick={onPickFiles}>Thêm ảnh/video/tài liệu</Button>
+          <div className="rounded-xl border border-border-light bg-white p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-base font-bold text-text-primary leading-none">Thêm vào bài viết của bạn</p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onPickFiles}
+                  aria-label="Thêm ảnh/video"
+                  className="rounded-lg border border-border-light bg-app-bg p-2 text-text-primary hover:bg-hover-bg"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z" />
+                    <path d="M9 10a1.5 1.5 0 1 0 0-.001" />
+                    <path d="m20 15-5-5-4 4-2-2-5 5" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={onInsertTag}
+                  aria-label="Gắn thẻ"
+                  className="rounded-lg border border-border-light bg-app-bg p-2 text-text-primary hover:bg-hover-bg"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7" />
+                    <path d="M14 4h6v6" />
+                    <path d="M10 14 20 4" />
+                  </svg>
+                </button>
+              </div>
             </div>
             {!!selectedFiles.length && (
               <p className="mt-2 text-xs text-text-secondary">Đã chọn {selectedFiles.length} tệp</p>
@@ -200,7 +220,7 @@ function PostComposer() {
             <div className="space-y-1">
               {selectedFiles.map((file, idx) => ({ file, idx })).filter(item => isVideoFile(item.file)).map(({ file, idx }) => (
                 <div key={`${file.name}-${idx}`} className="flex items-center justify-between rounded-xl border border-border-light bg-app-bg px-3 py-2">
-                  <span className="text-sm text-text-primary truncate pr-3">🎬 {file.name}</span>
+                  <span className="text-sm text-text-primary truncate pr-3">Video {file.name}</span>
                   <button className="text-xs text-text-secondary hover:text-text-primary" onClick={() => removeImageAt(idx)} aria-label="Xóa tệp video">
                     Xóa
                   </button>
@@ -213,7 +233,7 @@ function PostComposer() {
             <div className="space-y-1">
               {selectedFiles.map((file, idx) => ({ file, idx })).filter(item => !isImageFile(item.file) && !isVideoFile(item.file)).map(({ file, idx }) => (
                 <div key={`${file.name}-${idx}`} className="flex items-center justify-between rounded-xl border border-border-light bg-app-bg px-3 py-2">
-                  <span className="text-sm text-text-primary truncate pr-3">📄 {file.name}</span>
+                  <span className="text-sm text-text-primary truncate pr-3">Tệp {file.name}</span>
                   <button className="text-xs text-text-secondary hover:text-text-primary" onClick={() => removeImageAt(idx)} aria-label="Xóa tệp">
                     Xóa
                   </button>
@@ -221,6 +241,15 @@ function PostComposer() {
               ))}
             </div>
           )}
+
+          <Button
+            onClick={() => mutation.mutate()}
+            loading={mutation.isPending}
+            disabled={!content.trim() || mutation.isPending}
+            className="w-full"
+          >
+            Tiếp
+          </Button>
         </div>
       </Modal>
 
@@ -599,6 +628,11 @@ export default function FeedPage() {
   const toast = useToast()
   const queryClient = useQueryClient()
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
+  const pullStartYRef = useRef<number | null>(null)
+  const isPullingRef = useRef(false)
+  const pullDistanceRef = useRef(0)
+  const [pullDistance, setPullDistance] = useState(0)
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false)
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, refetch } = useInfiniteQuery({
     queryKey: ['feed'],
@@ -646,6 +680,77 @@ export default function FeedPage() {
   const storyGroups = useMemo(() => groupStoriesByAuthor(storiesQuery.data ?? []), [storiesQuery.data])
 
   useEffect(() => {
+    pullDistanceRef.current = pullDistance
+  }, [pullDistance])
+
+  const refreshAtTop = useCallback(async () => {
+    if (isPullRefreshing) return
+    setIsPullRefreshing(true)
+    try {
+      await Promise.all([refetch(), storiesQuery.refetch()])
+    } finally {
+      setIsPullRefreshing(false)
+      setPullDistance(0)
+    }
+  }, [isPullRefreshing, refetch, storiesQuery])
+
+  useEffect(() => {
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+    if (!isTouchDevice) return
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (window.scrollY > 0 || isPullRefreshing) return
+      pullStartYRef.current = event.touches[0]?.clientY ?? null
+      isPullingRef.current = pullStartYRef.current !== null
+    }
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (!isPullingRef.current || pullStartYRef.current === null) return
+      if (window.scrollY > 0) {
+        isPullingRef.current = false
+        setPullDistance(0)
+        return
+      }
+
+      const currentY = event.touches[0]?.clientY ?? pullStartYRef.current
+      const delta = currentY - pullStartYRef.current
+      if (delta <= 0) {
+        setPullDistance(0)
+        return
+      }
+
+      const distance = Math.min(PULL_TO_REFRESH_MAX, delta * 0.5)
+      setPullDistance(distance)
+
+      if (delta > 8) event.preventDefault()
+    }
+
+    const handleTouchEnd = () => {
+      if (!isPullingRef.current) return
+      isPullingRef.current = false
+      pullStartYRef.current = null
+
+      if (pullDistanceRef.current >= PULL_TO_REFRESH_TRIGGER) {
+        void refreshAtTop()
+      } else {
+        setPullDistance(0)
+      }
+    }
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true })
+    window.addEventListener('touchmove', handleTouchMove, { passive: false })
+    window.addEventListener('touchend', handleTouchEnd, { passive: true })
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: true })
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart)
+      window.removeEventListener('touchmove', handleTouchMove)
+      window.removeEventListener('touchend', handleTouchEnd)
+      window.removeEventListener('touchcancel', handleTouchEnd)
+    }
+  }, [isPullRefreshing, refreshAtTop])
+
+  useEffect(() => {
     const sentinel = loadMoreRef.current
     if (!sentinel) return
 
@@ -668,7 +773,25 @@ export default function FeedPage() {
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0)
 
   return (
-    <div>
+    <div className="relative">
+      <div
+        className="flex justify-center overflow-hidden transition-[max-height] duration-200"
+        style={{ maxHeight: pullDistance > 0 || isPullRefreshing ? 44 : 0 }}
+      >
+        <div className="mt-1 h-7 w-7 rounded-full border border-border-light bg-white/90 shadow-sm grid place-items-center">
+          <span
+            className={`h-4 w-4 rounded-full border-2 border-slate-200 border-t-primary-500 ${isPullRefreshing ? 'animate-spin' : ''}`}
+            style={!isPullRefreshing ? { transform: `rotate(${Math.min(360, (pullDistance / PULL_TO_REFRESH_TRIGGER) * 360)}deg)` } : undefined}
+          />
+        </div>
+      </div>
+
+      <div
+        style={{
+          transform: `translateY(${pullDistance}px)`,
+          transition: isPullRefreshing || pullDistance === 0 ? 'transform 160ms ease-out' : undefined,
+        }}
+      >
       <StoryStrip
         groups={storyGroups}
         isLoading={storiesQuery.isLoading}
@@ -718,6 +841,7 @@ export default function FeedPage() {
           )}
         </div>
       )}
+      </div>
 
       <StoryComposerModal
         open={storyComposerOpen}

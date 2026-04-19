@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { friendsApi } from '@/api/users'
 import { Avatar } from '@/components/ui/Avatar'
@@ -12,6 +12,8 @@ import { User } from '@/api/auth'
 import { connectSocket } from '@/socket/socketClient'
 import { useAuthStore } from '@/store/authStore'
 import { chatApi } from '@/api/index'
+import { usePullToRefresh } from '@/hooks/usePullToRefresh'
+import { PullToRefreshIndicator } from '@/components/ui/PullToRefreshIndicator'
 
 type UserCardAction = {
   label: string
@@ -150,7 +152,25 @@ export default function FriendsPage() {
     onError: (err) => toast.error(extractError(err)),
   })
 
+  const refreshPage = useCallback(async () => {
+    await Promise.all([
+      queryClient.refetchQueries({ queryKey: ['friend-requests'], exact: true }),
+      queryClient.refetchQueries({ queryKey: ['friend-sent-requests'], exact: true }),
+      queryClient.refetchQueries({ queryKey: ['friend-suggestions'], exact: true }),
+      queryClient.refetchQueries({ queryKey: ['friends'], exact: true }),
+    ])
+  }, [queryClient])
+  const { pullDistance, isRefreshing } = usePullToRefresh(refreshPage)
+
   return (
+    <div className='relative'>
+      <PullToRefreshIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} />
+      <div
+        style={{
+          transform: `translateY(${pullDistance}px)`,
+          transition: isRefreshing || pullDistance === 0 ? 'transform 160ms ease-out' : undefined,
+        }}
+      >
     <div className="space-y-6">
       <section>
         <h2 className="text-xl font-bold text-text-primary mb-3">Lời mời kết bạn {requests && requests.length > 0 && `(${requests.length})`}</h2>
@@ -241,6 +261,8 @@ export default function FriendsPage() {
           </div>
         )}
       </section>
+    </div>
+      </div>
     </div>
   )
 }

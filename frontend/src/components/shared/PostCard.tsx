@@ -268,14 +268,14 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
 
             <div className="mt-1 ml-2 flex items-center gap-3 text-xs text-text-muted">
               <button
-                className={cn('hover:underline', comment.isLiked && 'text-primary-600 font-medium')}
+                className={cn('hover:underline flex items-center gap-0.5', comment.isLiked ? 'text-red-500 font-medium' : '')}
                 onClick={(e) => {
                   e.stopPropagation()
                   likeCommentMutation.mutate(comment.id)
                 }}
                 disabled={likeCommentMutation.isPending}
               >
-                {comment.isLiked ? 'Đã thích' : 'Thích'}
+                {comment.isLiked ? '❤️' : '🤍'} Tim
               </button>
               <button
                 className="hover:underline"
@@ -287,7 +287,7 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
                 Trả lời
               </button>
               <time dateTime={comment.createdAt}>{timeAgo(comment.createdAt)}</time>
-              {comment.likesCount > 0 && <span>{comment.likesCount} lượt thích</span>}
+              {comment.likesCount > 0 && <span>{comment.likesCount} ❤️</span>}
             </div>
 
             {isReplyingThis && (
@@ -329,8 +329,8 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
 
     if (images.length === 1) {
       return (
-        <div className="p-3 pb-2">
-          <button type="button" onClick={openDetail} className="w-full border-2 border-border-light bg-app-bg overflow-hidden rounded-md">
+        <div className="mt-2">
+          <button type="button" onClick={openDetail} className="w-full overflow-hidden bg-black">
             <img src={images[0]} alt="Ảnh bài viết" className="w-full h-64 md:h-80 object-cover" loading="lazy" />
           </button>
         </div>
@@ -339,8 +339,8 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
 
     if (images.length === 2) {
       return (
-        <div className="p-3 pb-2">
-          <button type="button" onClick={openDetail} className="w-full border-2 border-border-light bg-app-bg overflow-hidden rounded-md">
+        <div className="mt-2">
+          <button type="button" onClick={openDetail} className="w-full overflow-hidden bg-black">
             <div className="grid grid-cols-2 gap-[2px] h-64 md:h-80">
               {images.slice(0, 2).map((img, idx) => (
                 <img key={idx} src={img} alt={`Ảnh bài viết ${idx + 1}`} className="w-full h-full object-cover" loading="lazy" />
@@ -353,8 +353,8 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
 
     if (images.length === 3) {
       return (
-        <div className="p-3 pb-2">
-          <button type="button" onClick={openDetail} className="w-full border-2 border-border-light bg-app-bg overflow-hidden rounded-md">
+        <div className="mt-2">
+          <button type="button" onClick={openDetail} className="w-full overflow-hidden bg-black">
             <div className="grid grid-cols-2 grid-rows-2 gap-[2px] h-64 md:h-80">
               <img src={images[0]} alt="Ảnh bài viết 1" className="w-full h-full object-cover row-span-2" loading="lazy" />
               <img src={images[1]} alt="Ảnh bài viết 2" className="w-full h-full object-cover" loading="lazy" />
@@ -367,8 +367,8 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
 
     if (images.length === 4) {
       return (
-        <div className="p-3 pb-2">
-          <button type="button" onClick={openDetail} className="w-full border-2 border-border-light bg-app-bg overflow-hidden rounded-md">
+        <div className="mt-2">
+          <button type="button" onClick={openDetail} className="w-full overflow-hidden bg-black">
             <div className="grid grid-cols-2 grid-rows-2 gap-[2px] h-64 md:h-80">
               {images.slice(0, 4).map((img, idx) => (
                 <img key={idx} src={img} alt={`Ảnh bài viết ${idx + 1}`} className="w-full h-full object-cover" loading="lazy" />
@@ -380,8 +380,8 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
     }
 
     return (
-      <div className="p-3 pb-2">
-        <button type="button" onClick={openDetail} className="w-full border-2 border-border-light bg-app-bg overflow-hidden rounded-md">
+      <div className="mt-2">
+        <button type="button" onClick={openDetail} className="w-full overflow-hidden bg-black">
           <div className="grid grid-cols-2 grid-rows-2 gap-[2px] h-64 md:h-80">
             <img src={visible[0]} alt="Ảnh bài viết 1" className="w-full h-full object-cover row-span-2" loading="lazy" />
             <img src={visible[1]} alt="Ảnh bài viết 2" className="w-full h-full object-cover" loading="lazy" />
@@ -406,7 +406,7 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
   const renderPostVideos = () => {
     if (videoUrls.length === 0) return null
     return (
-      <div className="p-3 pt-0 space-y-2">
+      <div className="mt-2 space-y-2">
         {videoUrls.slice(0, 2).map((url, idx) => (
           <div key={`${post.id}-video-${idx}`} className="w-full overflow-hidden rounded-md border-2 border-border-light bg-app-bg">
             <video src={url} className="w-full max-h-96 object-cover" controls preload="metadata" />
@@ -417,7 +417,7 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
   }
 
   return (
-    <article className="bg-white rounded-xl border border-border-light shadow-card overflow-hidden">
+    <article className="bg-white rounded-lg border border-slate-200 overflow-hidden">
       <div className="px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -466,10 +466,10 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
             ) : (
               <>
                 <Link to={`/profile/${post.authorId}`} className="flex-shrink-0">
-                  <Avatar src={post.author?.avatar} name={post.author?.displayName ?? ''} size="sm" />
+                  <Avatar src={post.author?.avatar} name={post.author?.displayName ?? ''} size="md" />
                 </Link>
                 <div className="flex flex-col min-w-0">
-                  <Link to={`/profile/${post.authorId}`} className="text-[14px] leading-tight font-semibold text-text-primary hover:underline truncate">
+                  <Link to={`/profile/${post.authorId}`} className="text-[15px] leading-tight font-semibold text-text-primary hover:underline truncate">
                     {post.author?.displayName}
                   </Link>
                   <div className="flex items-center text-[12px] text-text-muted mt-0.5 gap-1">
@@ -566,7 +566,7 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
           <button
             type="button"
             onClick={openDetail}
-            className="mt-2 text-left w-full text-[21px] leading-8 font-semibold text-slate-800 line-clamp-2"
+            className="mt-2 text-left w-full text-[17px] leading-6 font-normal text-slate-800 whitespace-pre-wrap line-clamp-3"
           >
             <MentionText content={post.content} />
           </button>
@@ -623,84 +623,48 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
       {renderPostMedia()}
       {renderPostVideos()}
 
-      <div className="hidden lg:flex items-center justify-between border-t border-border-light px-4 py-2 bg-white">
-        <div className="flex items-center gap-5">
-          <button
-            type="button"
-            className={cn('flex items-center gap-1.5 text-sm', post.isLiked ? 'text-red-500' : 'text-slate-500 hover:text-slate-700')}
-            onClick={() => likeMutation.mutate()}
-          >
-            <span className="text-lg leading-none">{post.isLiked ? '♥' : '♡'}</span>
-            <span>{post.likesCount}</span>
-          </button>
-          <button type="button" className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700" onClick={openDetail}>
-            <span className="text-lg leading-none">💬</span>
-            <span>{post.commentsCount}</span>
-          </button>
-        </div>
-        <button type="button" className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700" onClick={handleSharePost}>
-          <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
-          <span>Chia sẻ</span>
+      <div className="border-t border-border-light px-3 py-2 bg-white flex items-center justify-between text-[13px] text-slate-500">
+        <button type="button" onClick={openReactions} className="flex items-center gap-1.5 hover:underline">
+          <span className="text-red-500 text-sm">❤️</span>
+          <span>{post.likesCount}</span>
+        </button>
+        <button type="button" onClick={openDetail} className="hover:underline">
+          {post.commentsCount} bình luận
         </button>
       </div>
 
-      <div className="flex lg:hidden items-end border-t border-border-light px-3 pt-2 pb-2 bg-white gap-1 rounded-b-md">
-        {[
-          {
-            id: 'like',
-            label: post.isLiked ? 'Đã tim' : 'Tim',
-            icon: post.isLiked ? '♥' : '♡',
-            onClick: () => likeMutation.mutate(),
-            active: post.isLiked,
-          },
-          {
-            id: 'comment',
-            label: 'Bình luận',
-            icon: '💬',
-            onClick: openDetail,
-          },
-          {
-            id: 'share',
-            label: post.isShared ? 'Đã chia sẻ' : 'Chia sẻ',
-            icon: <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>,
-            onClick: handleSharePost,
-            active: post.isShared,
-          },
-          {
-            id: 'save',
-            label: post.isSaved ? 'Đã lưu' : 'Lưu',
-            icon: '🔖',
-            onClick: () => saveMutation.mutate(),
-            active: post.isSaved,
-          },
-        ].map(action => (
-          <div key={action.id} className="flex-1 flex flex-col items-center">
-            {action.id === 'like' && post.likesCount > 0 && (
-              <span className="mb-1 text-[11px] leading-none text-red-500 bg-white border border-red-100 rounded-full px-1.5 py-0.5 shadow-sm">
-                ♥ {post.likesCount}
-              </span>
-            )}
-            {action.id !== 'like' && <span className="mb-1 h-[17px]" aria-hidden="true" />}
-            <button
-              onClick={action.onClick}
-              aria-label={action.label}
-              className={cn(
-                'w-full h-10 flex items-center justify-center text-sm font-medium rounded-lg transition-colors',
-                action.id === 'like'
-                  ? action.active
-                    ? 'text-red-500 bg-red-50 hover:bg-red-100'
-                    : 'text-text-secondary hover:bg-hover-bg'
-                  : action.active
-                    ? 'text-primary-600 bg-primary-50 hover:bg-primary-100'
-                    : 'text-text-secondary hover:bg-hover-bg'
-              )}
-              aria-pressed={action.active}
-            >
-              <span className={cn('leading-none', action.id === 'like' ? 'text-[22px]' : 'text-[20px]')}>{action.icon}</span>
-              <span className="sr-only">{action.label}</span>
-            </button>
-          </div>
-        ))}
+      <div className="border-t border-border-light px-2 py-1.5 bg-white grid grid-cols-3 gap-1">
+        <button
+          type="button"
+          onClick={() => likeMutation.mutate()}
+          disabled={likeMutation.isPending}
+          className={cn(
+            'h-9 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-1.5',
+            post.isLiked ? 'text-red-500' : 'text-slate-600 hover:bg-slate-100'
+          )}
+        >
+          <svg className="w-4 h-4" fill={post.isLiked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 1 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z" />
+          </svg>
+          <span>Thích</span>
+        </button>
+        <button
+          type="button"
+          onClick={openDetail}
+          className="h-9 rounded-md text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors flex items-center justify-center gap-1.5"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+          <span>Bình luận</span>
+        </button>
+        <button
+          type="button"
+          onClick={handleSharePost}
+          disabled={shareMutation.isPending}
+          className="h-9 rounded-md text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors flex items-center justify-center gap-1.5"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+          <span>Chia sẻ</span>
+        </button>
       </div>
 
       <Modal open={detailOpen} onClose={() => setDetailOpen(false)} title="Chi tiết bài viết" size="xl">

@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { groupsApi, uploadsApi } from '@/api/index'
@@ -11,6 +11,8 @@ import { useToast } from '@/components/ui/Toast'
 import { extractError } from '@/api/client'
 import { useAuthStore } from '@/store/authStore'
 import { Modal } from '@/components/ui/Modal'
+import { usePullToRefresh } from '@/hooks/usePullToRefresh'
+import { PullToRefreshIndicator } from '@/components/ui/PullToRefreshIndicator'
 
 type Tag = '# UI' | '# Database' | '# Meeting'
 type GroupMember = {
@@ -212,6 +214,15 @@ export default function GroupDetailPage() {
   const videoFiles = selectedFiles.filter((file) => isVideoFile(file))
   const documentFiles = selectedFiles.filter((file) => !isImageFile(file) && !isVideoFile(file))
 
+  const refreshPage = useCallback(async () => {
+    await Promise.all([
+      groupQuery.refetch(),
+      membersQuery.refetch(),
+      postsQuery.refetch(),
+    ])
+  }, [groupQuery, membersQuery, postsQuery])
+  const { pullDistance, isRefreshing } = usePullToRefresh(refreshPage)
+
   if (groupQuery.isLoading) return <PostSkeleton />
 
   if (!group) {
@@ -219,6 +230,14 @@ export default function GroupDetailPage() {
   }
 
   return (
+    <div className='relative'>
+      <PullToRefreshIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} />
+      <div
+        style={{
+          transform: `translateY(${pullDistance}px)`,
+          transition: isRefreshing || pullDistance === 0 ? 'transform 160ms ease-out' : undefined,
+        }}
+      >
     <div className='min-h-screen bg-[#f3f6fb] text-slate-800'>
       <div className='mx-auto max-w-[1500px] px-0 sm:px-6 pb-8 pt-0 sm:pt-2'>
         <main className='grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_330px] gap-0 sm:gap-6'>
@@ -493,6 +512,9 @@ export default function GroupDetailPage() {
           )}
         </div>
       </Modal>
+
+      </div>
+    </div>
 
       <input
         ref={fileInputRef}

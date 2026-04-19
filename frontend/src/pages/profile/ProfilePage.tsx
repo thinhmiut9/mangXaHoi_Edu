@@ -1,4 +1,4 @@
-import { ChangeEvent, useMemo, useState } from 'react'
+import { ChangeEvent, useCallback, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { usersApi } from '@/api/users'
@@ -16,6 +16,8 @@ import { Input } from '@/components/ui/Input'
 import { TextArea } from '@/components/ui/TextArea'
 import { useToast } from '@/components/ui/Toast'
 import { extractError } from '@/api/client'
+import { usePullToRefresh } from '@/hooks/usePullToRefresh'
+import { PullToRefreshIndicator } from '@/components/ui/PullToRefreshIndicator'
 
 const TABS = ['Bài viết', 'Giới thiệu', 'Tài liệu', 'Bạn bè', 'Ảnh'] as const
 
@@ -117,33 +119,33 @@ export default function ProfilePage() {
   const [avatarPreview, setAvatarPreview] = useState<string>('')
   const [coverPreview, setCoverPreview] = useState<string>('')
 
-  const { data: profile, isLoading: profileLoading } = useQuery({
+  const { data: profile, isLoading: profileLoading, refetch: refetchProfile } = useQuery({
     queryKey: ['profile', id],
     queryFn: () => usersApi.getProfile(id!),
     enabled: !!id,
   })
 
-  const { data: postsData, isLoading: postsLoading } = useQuery({
+  const { data: postsData, isLoading: postsLoading, refetch: refetchPosts } = useQuery({
     queryKey: ['user-posts', id],
     queryFn: () => postsApi.getUserPosts(id!),
     enabled: !!id,
   })
 
-  const { data: userFriends = [], isLoading: friendsLoading } = useQuery({
+  const { data: userFriends = [], isLoading: friendsLoading, refetch: refetchProfileFriends } = useQuery({
     queryKey: ['profile-friends', id],
     queryFn: () => usersApi.getUserFriends(id!),
     enabled: !!id,
   })
-  const { data: myGroups = [] } = useQuery({
+  const { data: myGroups = [], refetch: refetchMyGroups } = useQuery({
     queryKey: ['my-groups'],
     queryFn: groupsApi.getMyGroups,
     enabled: Boolean(id && currentUser?.id === id),
   })
 
-  const { data: requests } = useQuery({ queryKey: ['friend-requests'], queryFn: friendsApi.getRequests })
-  const { data: sentRequests } = useQuery({ queryKey: ['friend-sent-requests'], queryFn: friendsApi.getSentRequests })
-  const { data: friends } = useQuery({ queryKey: ['friends'], queryFn: friendsApi.getFriends })
-  const { data: blockedUsers } = useQuery({ queryKey: ['blocked-users'], queryFn: friendsApi.getBlockedUsers })
+  const { data: requests, refetch: refetchFriendRequests } = useQuery({ queryKey: ['friend-requests'], queryFn: friendsApi.getRequests })
+  const { data: sentRequests, refetch: refetchSentRequests } = useQuery({ queryKey: ['friend-sent-requests'], queryFn: friendsApi.getSentRequests })
+  const { data: friends, refetch: refetchFriends } = useQuery({ queryKey: ['friends'], queryFn: friendsApi.getFriends })
+  const { data: blockedUsers, refetch: refetchBlockedUsers } = useQuery({ queryKey: ['blocked-users'], queryFn: friendsApi.getBlockedUsers })
 
   const friendRequestMutation = useMutation({
     mutationFn: () => friendsApi.sendRequest(id!),
@@ -405,6 +407,31 @@ export default function ProfilePage() {
     setCoverPreview(URL.createObjectURL(file))
   }
 
+  const refreshPage = useCallback(async () => {
+    await Promise.all([
+      refetchProfile(),
+      refetchPosts(),
+      refetchProfileFriends(),
+      refetchFriendRequests(),
+      refetchSentRequests(),
+      refetchFriends(),
+      refetchBlockedUsers(),
+      ...(id && currentUser?.id === id ? [refetchMyGroups()] : []),
+    ])
+  }, [
+    currentUser?.id,
+    id,
+    refetchBlockedUsers,
+    refetchFriendRequests,
+    refetchFriends,
+    refetchMyGroups,
+    refetchPosts,
+    refetchProfile,
+    refetchProfileFriends,
+    refetchSentRequests,
+  ])
+  const { pullDistance, isRefreshing } = usePullToRefresh(refreshPage)
+
   if (profileLoading) {
     return (
       <div className="space-y-4">
@@ -425,6 +452,14 @@ export default function ProfilePage() {
   }
 
   return (
+    <div className='relative'>
+      <PullToRefreshIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} />
+      <div
+        style={{
+          transform: `translateY(${pullDistance}px)`,
+          transition: isRefreshing || pullDistance === 0 ? 'transform 160ms ease-out' : undefined,
+        }}
+      >
     <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-4">
       <section className="space-y-4 min-w-0">
         <div className="bg-white rounded-none sm:rounded-2xl sm:border border-border-light shadow-card overflow-hidden">
@@ -845,6 +880,8 @@ export default function ProfilePage() {
           )}
         </div>
       </Modal>
+    </div>
+      </div>
     </div>
   )
 }

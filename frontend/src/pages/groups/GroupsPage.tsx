@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Group, GroupJoinRequest, groupsApi, uploadsApi } from '@/api/index'
@@ -7,6 +7,8 @@ import { cn } from '@/utils/cn'
 import { useToast } from '@/components/ui/Toast'
 import { extractError } from '@/api/client'
 import { useAuthStore } from '@/store/authStore'
+import { usePullToRefresh } from '@/hooks/usePullToRefresh'
+import { PullToRefreshIndicator } from '@/components/ui/PullToRefreshIndicator'
 
 type GroupPrivacy = 'PUBLIC' | 'PRIVATE'
 type GroupCategory = 'TECH' | 'DESIGN'
@@ -178,8 +180,25 @@ export default function GroupsPage() {
     pendingApprovals: pendingJoinRequests.length,
   }), [myGroups.length, pendingJoinRequests.length])
 
+  const refreshPage = useCallback(async () => {
+    await Promise.all([
+      myGroupsQuery.refetch(),
+      groupsQuery.refetch(),
+      ownerJoinRequestsQuery.refetch(),
+    ])
+  }, [groupsQuery, myGroupsQuery, ownerJoinRequestsQuery])
+  const { pullDistance, isRefreshing } = usePullToRefresh(refreshPage)
+
   return (
     <>
+      <div className='relative'>
+        <PullToRefreshIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} />
+        <div
+          style={{
+            transform: `translateY(${pullDistance}px)`,
+            transition: isRefreshing || pullDistance === 0 ? 'transform 160ms ease-out' : undefined,
+          }}
+        >
       <div className='space-y-6 pb-8'>
         <section className='sm:rounded-[32px] sm:border border-slate-200/80 bg-white/80 sm:p-3 p-0 sm:shadow-[0_16px_36px_rgba(15,23,42,0.08)] backdrop-blur-sm'>
           <div className='grid grid-cols-1 gap-5'>
@@ -375,6 +394,8 @@ export default function GroupsPage() {
               )}
             </section>
           </main>
+        </div>
+      </div>
         </div>
       </div>
 

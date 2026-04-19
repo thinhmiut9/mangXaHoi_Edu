@@ -275,13 +275,13 @@ export const postsService = {
 
   async togglePin(postId: string, userId: string) {
     const post = await postsRepository.findById(postId)
-    if (!post) throw new AppError('BÃ i viáº¿t khÃ´ng tá»“n táº¡i', 404, 'POST_NOT_FOUND')
+    if (!post) throw new AppError('Bài viết không tồn tại', 404, 'POST_NOT_FOUND')
 
     const isAuthor = await postsRepository.isAuthor(postId, userId)
-    if (!isAuthor) throw new AppError('Báº¡n chá»‰ cÃ³ thá»ƒ ghim bÃ i viáº¿t cá»§a chÃ­nh mÃ¬nh', 403, 'FORBIDDEN')
+    if (!isAuthor) throw new AppError('Bạn chỉ có thể ghim bài viết của chính mình', 403, 'FORBIDDEN')
 
     const isGroupPost = Boolean(post.groupId && post.groupId !== 'null')
-    if (isGroupPost) throw new AppError('KhÃ´ng thá»ƒ ghim bÃ i viáº¿t nhÃ³m lÃªn trang cÃ¡ nhÃ¢n', 400, 'INVALID_PIN_TARGET')
+    if (isGroupPost) throw new AppError('Không thể ghim bài viết nhóm lên trang cá nhân', 400, 'INVALID_PIN_TARGET')
 
     return postsRepository.togglePin(postId, userId)
   },

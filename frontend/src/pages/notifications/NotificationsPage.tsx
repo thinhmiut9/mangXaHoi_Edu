@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { chatApi, notificationsApi } from '@/api/index'
 import { postsApi } from '@/api/posts'
@@ -10,6 +10,8 @@ import { cn } from '@/utils/cn'
 import { useNavigate } from 'react-router-dom'
 import { useToast } from '@/components/ui/Toast'
 import { extractError } from '@/api/client'
+import { usePullToRefresh } from '@/hooks/usePullToRefresh'
+import { PullToRefreshIndicator } from '@/components/ui/PullToRefreshIndicator'
 
 type ActiveFilter = 'ALL' | 'UNREAD' | 'SYSTEM' | 'INTERACTION' | 'MESSAGE'
 type SortMode = 'NEWEST' | 'OLDEST'
@@ -88,7 +90,7 @@ export default function NotificationsPage() {
   const [sortMode, setSortMode] = useState<SortMode>('NEWEST')
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
 
-  const { data: notifications, isLoading } = useQuery({
+  const { data: notifications, isLoading, refetch } = useQuery({
     queryKey: ['notifications'],
     queryFn: () => notificationsApi.list(),
   })
@@ -145,6 +147,10 @@ export default function NotificationsPage() {
   }, [mapped, activeFilter, sortMode])
 
   const grouped = useMemo(() => groupNotifications(filtered), [filtered])
+  const refreshPage = useCallback(async () => {
+    await refetch()
+  }, [refetch])
+  const { pullDistance, isRefreshing } = usePullToRefresh(refreshPage)
 
   const markSingleRead = async (id: string, isRead: boolean) => {
     if (isRead) return
@@ -217,7 +223,15 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className='relative'>
+      <PullToRefreshIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} />
+      <div
+        style={{
+          transform: `translateY(${pullDistance}px)`,
+          transition: isRefreshing || pullDistance === 0 ? 'transform 160ms ease-out' : undefined,
+        }}
+      >
+      <div className="space-y-4">
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
@@ -371,6 +385,7 @@ export default function NotificationsPage() {
         )}
       </section>
     </div>
+      </div>
+    </div>
   )
 }
-
