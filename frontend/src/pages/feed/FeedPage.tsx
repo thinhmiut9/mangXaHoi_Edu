@@ -643,7 +643,7 @@ export default function FeedPage() {
     return ['mp4', 'webm', 'mov', 'mkv', 'm4v'].includes(ext)
   }
 
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, refetch } = useInfiniteQuery({
+  const { data, error, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, refetch } = useInfiniteQuery({
     queryKey: ['feed'],
     queryFn: ({ pageParam = 1 }) => postsApi.getFeed(pageParam as number),
     getNextPageParam: (lastPage) => lastPage.meta?.hasNext ? (lastPage.meta.page + 1) : undefined,
@@ -821,7 +821,7 @@ export default function FeedPage() {
       ) : isError ? (
         <EmptyState
           title="Không thể tải bài viết"
-          description="Có lỗi xảy ra khi tải feed. Vui lòng thử lại."
+          description={extractError(error)}
           action={<Button onClick={() => refetch()} variant="secondary">Thử lại</Button>}
           icon={<span className="text-3xl">⚠️</span>}
         />

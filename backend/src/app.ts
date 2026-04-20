@@ -26,13 +26,31 @@ const app = express()
 app.use(helmet())
 
 // CORS
-const allowedOrigins = new Set([env.CLIENT_URL, 'http://localhost:5173', 'http://localhost:5174'])
+const configuredOrigins = env.CLIENT_URLS
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean)
+const allowedOrigins = new Set([
+  env.CLIENT_URL,
+  ...configuredOrigins,
+  'http://localhost:5173',
+  'http://localhost:5174',
+])
+
+function isAllowedOrigin(origin: string): boolean {
+  if (allowedOrigins.has(origin)) return true
+
+  // Optional convenience for Vercel deployments (preview + production domains).
+  if (origin.endsWith('.vercel.app')) return true
+
+  return false
+}
 
 app.use(cors({
   origin: (origin, callback) => {
     // Allow non-browser clients and same-origin requests with no Origin header.
     if (!origin) return callback(null, true)
-    if (allowedOrigins.has(origin)) return callback(null, true)
+    if (isAllowedOrigin(origin)) return callback(null, true)
     return callback(new Error(`CORS blocked for origin: ${origin}`))
   },
   credentials: true,

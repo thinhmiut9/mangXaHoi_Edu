@@ -34,6 +34,7 @@ const envSchema = z.object({
   MAIL_FROM: z.string().default('EduSocial <no-reply@edusocial.app>'),
 
   CLIENT_URL: z.string().url().default('http://localhost:5173'),
+  CLIENT_URLS: z.string().optional().default(''),
   RESET_PASSWORD_URL: z.string().url().default('http://localhost:5173/reset-password'),
 
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(900000),

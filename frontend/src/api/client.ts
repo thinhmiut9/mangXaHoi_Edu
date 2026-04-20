@@ -7,7 +7,7 @@ const API_URL = (envApiUrl ? envApiUrl : runtimeApiUrl).replace(/\/+$/, '')
 export const apiClient = axios.create({
   baseURL: `${API_URL}/api`,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 15000,
+  timeout: 30000,
 })
 
 // Request interceptor — attach JWT token
@@ -53,6 +53,15 @@ export interface ApiResponse<T> {
 
 export function extractError(err: unknown): string {
   if (axios.isAxiosError(err)) {
+    if (err.code === 'ECONNABORTED') {
+      return 'Server phan hoi cham. Vui long thu lai sau it giay.'
+    }
+    if (err.code === 'ERR_NETWORK') {
+      return 'Khong ket noi duoc toi may chu API. Hay kiem tra URL backend/CORS.'
+    }
+    if (err.response?.status === 429) {
+      return 'Ban dang thao tac qua nhanh. Vui long doi mot chut roi thu lai.'
+    }
     return (err.response?.data as { message?: string })?.message ?? err.message
   }
   if (err instanceof Error) return err.message

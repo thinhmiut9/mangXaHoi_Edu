@@ -58,15 +58,12 @@ async function main(): Promise<void> {
     indexes,
   }
 
-  // eslint-disable-next-line no-console
   console.log(JSON.stringify(output, null, 2))
   await closeDriver()
 }
 
 main().catch(async (err) => {
-  // eslint-disable-next-line no-console
   console.error('INTROSPECT_FAILED', err)
   await closeDriver()
   process.exit(1)
 })
-
