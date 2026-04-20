@@ -4,13 +4,27 @@ import { sendSuccess } from '../../utils/response'
 import { AppError } from '../../middleware/errorHandler'
 import path from 'path'
 
+const ALLOWED_IMAGE_FOLDERS = new Set(['images', 'posts', 'stories', 'covers'])
+const ALLOWED_VIDEO_FOLDERS = new Set(['stories', 'posts'])
+
+function pickFolder(
+  value: unknown,
+  allowed: Set<string>,
+  fallback: string
+): string {
+  if (typeof value !== 'string') return fallback
+  const normalized = value.trim().toLowerCase()
+  return allowed.has(normalized) ? normalized : fallback
+}
+
 export const uploadsController = {
   uploadImage: [
     uploadImage.single('image'),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         if (!req.file) throw new AppError('Khong co file duoc tai len', 400)
-        const result = await uploadToCloudinary(req.file.buffer, 'images')
+        const folder = pickFolder(req.body?.folder, ALLOWED_IMAGE_FOLDERS, 'images')
+        const result = await uploadToCloudinary(req.file.buffer, folder)
         sendSuccess(res, result, 'Tai anh thanh cong', 201)
       } catch (err) { next(err) }
     },
@@ -21,7 +35,8 @@ export const uploadsController = {
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         if (!req.file) throw new AppError('Khong co file duoc tai len', 400)
-        const result = await uploadVideoToCloudinary(req.file.buffer, 'stories')
+        const folder = pickFolder(req.body?.folder, ALLOWED_VIDEO_FOLDERS, 'stories')
+        const result = await uploadVideoToCloudinary(req.file.buffer, folder)
         sendSuccess(res, result, 'Tai video thanh cong', 201)
       } catch (err) { next(err) }
     },

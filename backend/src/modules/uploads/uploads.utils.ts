@@ -24,9 +24,12 @@ export const uploadVideo = multer({
   storage,
   limits: { fileSize: 80 * 1024 * 1024 }, // 80MB
   fileFilter: (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-    const allowedTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska']
-    if (!allowedTypes.includes(file.mimetype)) {
-      cb(new AppError('Ch? ch?p nh?n file video (mp4, webm, mov, mkv)', 400))
+    const mime = String(file.mimetype || '').toLowerCase()
+    const ext = (file.originalname.split('.').pop() || '').toLowerCase()
+    const allowedExt = new Set(['mp4', 'webm', 'mov', 'mkv', 'm4v'])
+    const isAllowed = mime.startsWith('video/') || allowedExt.has(ext)
+    if (!isAllowed) {
+      cb(new AppError('Chi chap nhan file video (mp4, webm, mov, mkv, m4v)', 400))
     } else {
       cb(null, true)
     }

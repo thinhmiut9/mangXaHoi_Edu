@@ -65,6 +65,8 @@ export default function ChatPage() {
   const [callPeerUserId, setCallPeerUserId] = useState<string | null>(null)
   const [callConversationId, setCallConversationId] = useState<string | null>(null)
   const [isMicMuted, setIsMicMuted] = useState(false)
+  const [isSpeakerOn, setIsSpeakerOn] = useState(true)
+  const [callElapsedSeconds, setCallElapsedSeconds] = useState(0)
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null)
@@ -170,7 +172,17 @@ export default function ChatPage() {
     setCallPeerUserId(null)
     setCallConversationId(null)
     setIsMicMuted(false)
+    setIsSpeakerOn(true)
+    setCallElapsedSeconds(0)
   }
+
+  useEffect(() => {
+    if (callStatus !== 'in-call') return
+    const timer = window.setInterval(() => {
+      setCallElapsedSeconds((prev) => prev + 1)
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [callStatus])
 
   const setupPeerConnection = (peerUserId: string, conversationRef: string) => {
     if (peerConnectionRef.current) {
@@ -301,6 +313,22 @@ export default function ChatPage() {
       emitCallHangup({ toUserId: callPeerUserId, conversationId: callConversationId })
     }
     resetCallState()
+  }
+
+  const toggleMic = () => {
+    const nextMuted = !isMicMuted
+    setIsMicMuted(nextMuted)
+    localStreamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = !nextMuted
+    })
+  }
+
+  const toggleSpeaker = () => {
+    const nextSpeakerOn = !isSpeakerOn
+    setIsSpeakerOn(nextSpeakerOn)
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.volume = nextSpeakerOn ? 1 : 0.4
+    }
   }
 
   // Socket setup
@@ -517,6 +545,11 @@ export default function ChatPage() {
   const getConversationPeerName = (conv: Conversation) => {
     const peer = conv.participants.find((p) => p.id !== user?.id)
     return (peer?.displayName ?? '').trim()
+  }
+  const formatCallDuration = (totalSeconds: number) => {
+    const mm = Math.floor(totalSeconds / 60).toString().padStart(2, '0')
+    const ss = (totalSeconds % 60).toString().padStart(2, '0')
+    return `${mm}:${ss}`
   }
   const friendAvatars = useMemo(
     () => (friends ?? []).filter(f => f.id !== user?.id).slice(0, 20),
@@ -1182,43 +1215,92 @@ export default function ChatPage() {
         </div>
       </Modal>
 
-      <Modal
-        open={callStatus !== 'idle' && callStatus !== 'incoming'}
-        onClose={hangupCall}
-        title="Cuộc gọi thoại"
-        size="sm"
-        closeOnOverlay={false}
-        footer={
-          <>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                const nextMuted = !isMicMuted
-                setIsMicMuted(nextMuted)
-                localStreamRef.current?.getAudioTracks().forEach((track) => {
-                  track.enabled = !nextMuted
-                })
-              }}
-            >
-              {isMicMuted ? 'Bật mic' : 'Tắt mic'}
-            </Button>
-            <Button variant="danger" onClick={hangupCall}>
-              Kết thúc
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-2">
-          <p className="text-[16px] font-semibold text-gray-900">
-            {otherParticipant?.displayName ?? incomingCaller?.displayName ?? 'Người dùng'}
-          </p>
-          <p className="text-[14px] text-gray-600">
-            {callStatus === 'calling' && 'Đang đổ chuông...'}
-            {callStatus === 'connecting' && 'Đang kết nối cuộc gọi...'}
-            {callStatus === 'in-call' && 'Đang trong cuộc gọi thoại'}
-          </p>
+      {callStatus !== 'idle' && callStatus !== 'incoming' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-[370px] rounded-[28px] bg-[#f4f4f7] px-7 py-10 shadow-2xl">
+            <p className="text-center text-[33px] leading-none font-semibold text-[#353845]">
+              {callStatus === 'calling' && 'Đang gọi...'}
+              {callStatus === 'connecting' && 'Đang kết nối...'}
+              {callStatus === 'in-call' && 'Đang gọi...'}
+            </p>
+
+            <div className="mt-8 flex justify-center">
+              <Avatar
+                src={otherParticipant?.avatar ?? incomingCaller?.avatar}
+                name={otherParticipant?.displayName ?? incomingCaller?.displayName ?? 'Người dùng'}
+                size="2xl"
+                online={callStatus === 'in-call'}
+                className="ring-4 ring-white shadow-lg"
+              />
+            </div>
+
+            <p className="mt-6 text-center text-[38px] leading-tight font-bold text-[#353845] break-words">
+              {otherParticipant?.displayName ?? incomingCaller?.displayName ?? 'Người dùng'}
+            </p>
+            <p className="mt-2 text-center text-[28px] leading-none text-[#757b86]">
+              {callStatus === 'in-call'
+                ? formatCallDuration(callElapsedSeconds)
+                : callStatus === 'calling'
+                  ? 'Đang đổ chuông...'
+                  : 'Đang kết nối cuộc gọi...'}
+            </p>
+
+            <div className="mt-12 flex items-start justify-center gap-7">
+              <div className="flex flex-col items-center">
+                <button
+                  type="button"
+                  onClick={toggleMic}
+                  className={cn(
+                    'flex h-16 w-16 items-center justify-center rounded-full shadow-md transition-colors',
+                    isMicMuted ? 'bg-[#5b6270] text-white' : 'bg-[#d9dce3] text-[#646b78]'
+                  )}
+                  aria-label={isMicMuted ? 'Bật mic' : 'Tắt mic'}
+                >
+                  <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path d="M12 16a4 4 0 0 0 4-4V7a4 4 0 1 0-8 0v5a4 4 0 0 0 4 4Z" />
+                    <path d="M5 12a7 7 0 0 0 14 0" />
+                    <path d="M12 19v3" />
+                  </svg>
+                </button>
+                <span className="mt-2 text-[18px] text-[#636975]">{isMicMuted ? 'Bật mic' : 'Tắt mic'}</span>
+              </div>
+
+              <div className="flex flex-col items-center">
+                <button
+                  type="button"
+                  onClick={toggleSpeaker}
+                  className={cn(
+                    'flex h-16 w-16 items-center justify-center rounded-full shadow-md transition-colors',
+                    isSpeakerOn ? 'bg-[#d9dce3] text-[#646b78]' : 'bg-[#5b6270] text-white'
+                  )}
+                  aria-label={isSpeakerOn ? 'Tắt loa' : 'Bật loa'}
+                >
+                  <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path d="M4 10v4h4l5 4V6L8 10H4Z" />
+                    <path d="M16 9a5 5 0 0 1 0 6" />
+                    <path d="M19 6a9 9 0 0 1 0 12" />
+                  </svg>
+                </button>
+                <span className="mt-2 text-[18px] text-[#636975]">Loa</span>
+              </div>
+
+              <div className="flex flex-col items-center">
+                <button
+                  type="button"
+                  onClick={hangupCall}
+                  className="flex h-16 w-16 items-center justify-center rounded-full bg-[#ef4747] text-white shadow-md transition-colors hover:bg-[#e23636]"
+                  aria-label="Kết thúc"
+                >
+                  <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M4.5 15.2c1.4-1.3 3.1-2 4.9-2h5.2c1.8 0 3.5.7 4.9 2l.6.5a1.1 1.1 0 0 1 .2 1.5l-1.6 2a1.1 1.1 0 0 1-1.3.3l-3.4-1.6a1.1 1.1 0 0 1-.6-1v-1.2H10.7V17a1.1 1.1 0 0 1-.6 1l-3.4 1.6a1.1 1.1 0 0 1-1.3-.3l-1.6-2a1.1 1.1 0 0 1 .2-1.5l.5-.6Z" />
+                  </svg>
+                </button>
+                <span className="mt-2 text-[18px] text-[#636975]">Kết thúc</span>
+              </div>
+            </div>
+          </div>
         </div>
-      </Modal>
+      )}
 
       <audio ref={remoteAudioRef} autoPlay playsInline />
     </div>

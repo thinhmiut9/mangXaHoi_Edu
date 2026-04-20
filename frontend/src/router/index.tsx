@@ -69,10 +69,11 @@ const router = createBrowserRouter([
     children: [
       { path: '/login',          element: <LoginPage /> },
       { path: '/register',       element: <RegisterPage /> },
-      { path: '/forgot-password', element: <ForgotPasswordPage /> },
-      { path: '/reset-password', element: <ResetPasswordPage /> },
     ],
   },
+  // Public password recovery routes (must remain accessible even when logged in)
+  { path: '/forgot-password', element: <ForgotPasswordPage /> },
+  { path: '/reset-password', element: <ResetPasswordPage /> },
   // Protected user routes
   {
     element: <RequireAuth />,

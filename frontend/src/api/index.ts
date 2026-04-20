@@ -224,8 +224,10 @@ export const reportsApi = {
 }
 
 export const uploadsApi = {
-  uploadImage: (file: File) => {
-    const form = new FormData(); form.append('image', file)
+  uploadImage: (file: File, folder?: 'images' | 'posts' | 'stories' | 'covers') => {
+    const form = new FormData()
+    form.append('image', file)
+    if (folder) form.append('folder', folder)
     return apiClient.post<ApiResponse<{ url: string; publicId: string }>>('/uploads/image', form, {
       headers: { 'Content-Type': 'multipart/form-data' }
     }).then(r => r.data.data)
@@ -236,8 +238,10 @@ export const uploadsApi = {
       headers: { 'Content-Type': 'multipart/form-data' }
     }).then(r => r.data.data)
   },
-  uploadVideo: (file: File) => {
-    const form = new FormData(); form.append('video', file)
+  uploadVideo: (file: File, folder?: 'stories' | 'posts') => {
+    const form = new FormData()
+    form.append('video', file)
+    if (folder) form.append('folder', folder)
     return apiClient.post<ApiResponse<{ url: string; publicId: string }>>('/uploads/video', form, {
       headers: { 'Content-Type': 'multipart/form-data' }
     }).then(r => r.data.data)

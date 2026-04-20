@@ -9,7 +9,7 @@ import { extractError } from '@/api/client'
 
 export default function ResetPasswordPage() {
   const [params] = useSearchParams()
-  const token = params.get('token') ?? ''
+  const token = (params.get('token') ?? '').trim()
   const navigate = useNavigate()
   const toast = useToast()
   const [password, setPassword] = useState('')
@@ -28,6 +28,8 @@ export default function ResetPasswordPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (password.length < 8) { setError('Mật khẩu tối thiểu 8 ký tự'); return }
+    if (!/[A-Z]/.test(password)) { setError('Mật khẩu phải có ít nhất 1 chữ hoa'); return }
+    if (!/[0-9]/.test(password)) { setError('Mật khẩu phải có ít nhất 1 chữ số'); return }
     if (password !== confirm) { setError('Mật khẩu không khớp'); return }
     setError('')
     mutation.mutate()

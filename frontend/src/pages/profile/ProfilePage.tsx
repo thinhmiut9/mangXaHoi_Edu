@@ -212,7 +212,7 @@ export default function ProfilePage() {
       }
 
       if (coverFile) {
-        const upload = await uploadsApi.uploadImage(coverFile)
+        const upload = await uploadsApi.uploadImage(coverFile, 'covers')
         coverPhoto = upload.url
       }
 

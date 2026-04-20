@@ -136,7 +136,7 @@ export default function GroupsPage() {
   })
 
   const uploadCoverMutation = useMutation({
-    mutationFn: (file: File) => uploadsApi.uploadImage(file),
+    mutationFn: (file: File) => uploadsApi.uploadImage(file, 'covers'),
     onSuccess: (data) => {
       setNewGroupCoverUrl(data.url)
       toast.success('Tải ảnh bìa lên thành công')

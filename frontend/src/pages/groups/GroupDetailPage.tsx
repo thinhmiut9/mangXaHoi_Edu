@@ -78,7 +78,11 @@ export default function GroupDetailPage() {
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isImageFile = (file: File) => file.type.startsWith('image/')
-  const isVideoFile = (file: File) => file.type.startsWith('video/')
+  const isVideoFile = (file: File) => {
+    if (file.type.startsWith('video/')) return true
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+    return ['mp4', 'webm', 'mov', 'mkv', 'm4v'].includes(ext)
+  }
 
   useEffect(() => {
     return () => {
@@ -117,8 +121,8 @@ export default function GroupDetailPage() {
       if (selectedFiles.length) {
         const uploaded = await Promise.all(
           selectedFiles.map((file) => {
-            if (isImageFile(file)) return uploadsApi.uploadImage(file).then(item => ({ type: 'image' as const, url: item.url }))
-            if (isVideoFile(file)) return uploadsApi.uploadVideo(file).then(item => ({ type: 'video' as const, url: item.url }))
+            if (isImageFile(file)) return uploadsApi.uploadImage(file, 'posts').then(item => ({ type: 'image' as const, url: item.url }))
+            if (isVideoFile(file)) return uploadsApi.uploadVideo(file, 'posts').then(item => ({ type: 'video' as const, url: item.url }))
             return uploadsApi.uploadDocument(file).then(item => ({ type: 'document' as const, url: item.url }))
           })
         )
