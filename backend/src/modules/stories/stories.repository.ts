@@ -145,5 +145,16 @@ export const storiesRepository = {
       viewedAt: r.viewedAt,
     }))
   },
+
+  async deleteStory(storyId: string, userId: string): Promise<string | null> {
+    const result = await runQueryOne<{ mediaUrl: string }>( 
+      `MATCH (u:User {userId: $userId})-[:CREATED_STORY]->(s:Story {storyId: $storyId})
+       WITH s, s.mediaUrl AS mediaUrl
+       DETACH DELETE s
+       RETURN mediaUrl`,
+      { storyId, userId }
+    )
+    return result?.mediaUrl ?? null
+  },
 }
 

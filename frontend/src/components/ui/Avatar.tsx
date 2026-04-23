@@ -23,11 +23,10 @@ export function Avatar({ src, name = '', size = 'md', online, className }: Avata
   const initials = getInitials(name)
 
   return (
-    <div className={cn('relative flex-shrink-0', className)}>
+    <div className={cn('relative flex-shrink-0 rounded-full', container, className)}>
       <div
         className={cn(
-          'rounded-full overflow-hidden flex items-center justify-center font-semibold select-none bg-primary-100 text-primary-700',
-          container
+          'w-full h-full rounded-full overflow-hidden flex items-center justify-center font-semibold select-none bg-primary-100 text-primary-700'
         )}
       >
         {src ? (

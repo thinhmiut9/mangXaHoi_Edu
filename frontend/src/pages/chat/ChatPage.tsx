@@ -717,7 +717,7 @@ export default function ChatPage() {
                     title={`${friend.displayName}${isOnline ? ' (Đang hoạt động)' : ''}`}
                   >
                     <div className="relative">
-                      <Avatar src={friend.avatar} name={friend.displayName} size="md" className="w-12 h-12 ring-2 ring-white shadow-sm" />
+                      <Avatar src={friend.avatar} name={friend.displayName} size="lg" className="ring-2 ring-white shadow-sm" />
                       <span
                         className={cn(
                           'absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white',
@@ -780,8 +780,8 @@ export default function ChatPage() {
                     <Avatar
                       src={other?.avatar}
                       name={other?.displayName ?? ''}
-                      size="md"
-                      className={cn('w-12 h-12 shadow-sm', isUnread && !isActive && 'ring-2 ring-blue-300')}
+                      size="lg"
+                      className={cn('shadow-sm', isUnread && !isActive && 'ring-2 ring-blue-300')}
                     />
                     {isActive && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-success-500 border-2 border-white rounded-full"></div>}
                   </div>

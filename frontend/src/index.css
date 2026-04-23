@@ -725,3 +725,4 @@ img {
   .hide-desktop { display: none !important; }
 }
 
+@keyframes storyProgress { from { width: 0%; } to { width: 100%; } }

@@ -99,4 +99,8 @@ export const storiesApi = {
       }
     })
   },
+
+  deleteStory: async (storyId: string) => {
+    await apiClient.delete(`/stories/${storyId}`)
+  },
 }

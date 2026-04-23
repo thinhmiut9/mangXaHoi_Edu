@@ -13,5 +13,6 @@ router.post('/', validate(createStorySchema), storiesController.createStory)
 router.get('/:id', storiesController.getStory)
 router.post('/:id/view', storiesController.markViewed)
 router.get('/:id/viewers', storiesController.getViewers)
+router.delete('/:id', storiesController.deleteStory)
 
 export default router

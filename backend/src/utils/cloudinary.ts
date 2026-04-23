@@ -87,3 +87,17 @@ export function buildSignedRawAccessUrl(fileUrl: string, asAttachment = false): 
     attachment: asAttachment,
   })
 }
+
+/**
+ * Delete a Cloudinary asset by its public URL.
+ * Silently ignores errors (asset may already be gone).
+ */
+export async function deleteCloudinaryAsset(url: string): Promise<void> {
+  const asset = parseCloudinaryAsset(url)
+  if (!asset) return
+  try {
+    await cloudinaryV2.uploader.destroy(asset.publicId, { resource_type: asset.resourceType })
+  } catch (err) {
+    console.warn('[Cloudinary] deleteCloudinaryAsset failed:', err)
+  }
+}

@@ -1,4 +1,5 @@
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { postsApi } from '@/api/posts'
 import { storiesApi, Story } from '@/api/stories'
@@ -304,7 +305,7 @@ type StoryGroup = {
   hasUnviewed: boolean
 }
 
-function groupStoriesByAuthor(stories: Story[]): StoryGroup[] {
+function groupStoriesByAuthor(stories: Story[], currentUserId?: string): StoryGroup[] {
   const map = new Map<string, StoryGroup>()
 
   for (const story of stories) {
@@ -331,7 +332,14 @@ function groupStoriesByAuthor(stories: Story[]): StoryGroup[] {
       ...group,
       stories: group.stories.sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     }))
-    .sort((a, b) => b.latestAt.localeCompare(a.latestAt))
+    .sort((a, b) => {
+      // Current user's stories always first
+      if (currentUserId) {
+        if (a.userId === currentUserId) return -1
+        if (b.userId === currentUserId) return 1
+      }
+      return b.latestAt.localeCompare(a.latestAt)
+    })
 }
 
 function StoryComposerModal({
@@ -517,14 +525,35 @@ function StoryViewer({
   onViewed: (storyId: string) => void
 }) {
   const { user } = useAuthStore()
+  const queryClient = useQueryClient()
+  const toast = useToast()
   const [groupIndex, setGroupIndex] = useState(startGroupIndex)
   const [storyIndex, setStoryIndex] = useState(0)
+  const [showViewers, setShowViewers] = useState(false)
+  const [showMenu, setShowMenu] = useState(false)
+
+  const deleteMutation = useMutation({
+    mutationFn: (storyId: string) => storiesApi.deleteStory(storyId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stories'] })
+      toast.success('Đã xóa tin')
+      onClose()
+    },
+    onError: () => toast.error('Xóa tin thất bại'),
+  })
+
+  // Touch swipe state for mobile
+  const touchStartXRef = useRef<number | null>(null)
+  const touchStartYRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (!open) return
     setGroupIndex(startGroupIndex)
     setStoryIndex(0)
+    setShowViewers(false)
   }, [open, startGroupIndex])
+
+  useEffect(() => { setShowViewers(false) }, [groupIndex, storyIndex])
 
   const activeGroup = groups[groupIndex]
   const activeStory = activeGroup?.stories[storyIndex]
@@ -537,38 +566,22 @@ function StoryViewer({
     staleTime: 15_000,
   })
 
-  const goNext = () => {
+  const goNext = useCallback(() => {
     if (!activeGroup) return
-
-    if (storyIndex < activeGroup.stories.length - 1) {
-      setStoryIndex(storyIndex + 1)
-      return
-    }
-
-    if (groupIndex < groups.length - 1) {
-      setGroupIndex(groupIndex + 1)
-      setStoryIndex(0)
-      return
-    }
-
+    if (storyIndex < activeGroup.stories.length - 1) { setStoryIndex(storyIndex + 1); return }
+    if (groupIndex < groups.length - 1) { setGroupIndex(groupIndex + 1); setStoryIndex(0); return }
     onClose()
-  }
+  }, [activeGroup, storyIndex, groupIndex, groups.length, onClose])
 
-  const goPrev = () => {
+  const goPrev = useCallback(() => {
     if (!activeGroup) return
-
-    if (storyIndex > 0) {
-      setStoryIndex(storyIndex - 1)
-      return
-    }
-
+    if (storyIndex > 0) { setStoryIndex(storyIndex - 1); return }
     if (groupIndex > 0) {
-      const prevGroupIndex = groupIndex - 1
-      const prevGroup = groups[prevGroupIndex]
-      setGroupIndex(prevGroupIndex)
-      setStoryIndex(Math.max(0, prevGroup.stories.length - 1))
+      const prev = groupIndex - 1
+      setGroupIndex(prev)
+      setStoryIndex(Math.max(0, groups[prev].stories.length - 1))
     }
-  }
+  }, [activeGroup, storyIndex, groupIndex, groups])
 
   useEffect(() => {
     if (!open || !activeStory) return
@@ -577,80 +590,355 @@ function StoryViewer({
 
   useEffect(() => {
     if (!open || !activeStory || activeStory.type !== 'IMAGE') return
-    const timer = window.setTimeout(() => {
-      goNext()
-    }, 5000)
+    const timer = window.setTimeout(() => { goNext() }, 5000)
     return () => window.clearTimeout(timer)
   }, [open, activeStory, groupIndex, storyIndex])
 
-  return (
-    <Modal open={open} onClose={onClose} title="Xem tin" size="2xl">
-      {!activeStory || !activeGroup ? null : (
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <Avatar src={activeGroup.author.avatar} name={activeGroup.author.displayName} size="sm" />
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [open, onClose])
+
+  useEffect(() => {
+    if (open) document.body.style.overflow = 'hidden'
+    else document.body.style.overflow = ''
+    return () => { document.body.style.overflow = '' }
+  }, [open])
+
+  // Mobile swipe handlers
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX
+    touchStartYRef.current = e.touches[0].clientY
+  }, [])
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return
+    const dx = e.changedTouches[0].clientX - touchStartXRef.current
+    const dy = e.changedTouches[0].clientY - touchStartYRef.current
+    touchStartXRef.current = null
+    touchStartYRef.current = null
+    // Only count mostly-horizontal swipes (dx > 50px and more horizontal than vertical)
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return
+    if (dx < 0) goNext()   // swipe left → next
+    else goPrev()           // swipe right → prev
+  }, [goNext, goPrev])
+
+  if (!open || !activeStory || !activeGroup) return null
+
+  const viewerCount = viewersQuery.data?.length ?? 0
+  const canGoPrev = groupIndex > 0 || storyIndex > 0
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 bg-black">
+
+      {/* ── DESKTOP LAYOUT (md+): full screen split ── */}
+      <div className="hidden md:flex h-full w-full" onClick={(e) => e.stopPropagation()}>
+
+        {/* Left panel — fixed width, full height */}
+        <div className="w-72 lg:w-80 flex-shrink-0 flex flex-col h-full"
+          style={{ background: 'var(--color-card)', borderRight: '1px solid var(--color-border-light)' }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 pt-5 pb-4"
+            style={{ borderBottom: '1px solid var(--color-border-light)' }}
+          >
             <div>
-              <p className="text-sm font-semibold text-text-primary">{activeGroup.author.displayName}</p>
-              <p className="text-xs text-text-secondary">{storyIndex + 1}/{activeGroup.stories.length} • Tin tự ẩn sau 24 giờ</p>
+              <p className="font-bold text-base leading-tight" style={{ color: 'var(--color-text-primary)' }}>Tin của mọi người</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>{groups.length} người đăng tin</p>
             </div>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-full transition-colors"
+              style={{ background: 'var(--color-hover-bg)', color: 'var(--color-text-secondary)' }}
+              aria-label="Đóng"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
 
-          <div className="rounded-lg overflow-hidden border border-border-light bg-black">
+          {/* Story group list */}
+          <div className="flex-1 overflow-y-auto py-3 space-y-0.5 px-3">
+            {groups.map((group, gi) => {
+              const isActive = gi === groupIndex
+              return (
+                <button
+                  key={group.userId}
+                  onClick={() => { setGroupIndex(gi); setStoryIndex(0) }}
+                  className="w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all text-left"
+                  style={{
+                    background: isActive ? 'var(--color-hover-bg)' : 'transparent',
+                  }}
+                  onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'var(--color-hover-bg)' }}
+                  onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+                >
+                  {/* Avatar only */}
+                  <Avatar
+                    src={group.author.avatar}
+                    name={group.author.displayName}
+                    size="md"
+                    className={`ring-2 flex-shrink-0 ${group.hasUnviewed ? 'ring-primary-400' : 'ring-white/25'}`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm truncate leading-snug font-medium" style={{ color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)', fontWeight: isActive ? 700 : 500 }}>
+                      {group.author.displayName}
+                    </p>
+                    <p className="text-[11px] truncate mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                      {group.stories.length} tin · {group.hasUnviewed ? <span className="text-primary-400">Chưa xem</span> : 'Đã xem'}
+                    </p>
+                  </div>
+                  {isActive && <div className="w-2 h-2 rounded-full bg-primary-400 flex-shrink-0" />}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Right area — story card centered */}
+        <div className="flex-1 flex items-center justify-center relative bg-[#0d0d0d]">
+          {/* Story card — aspect ratio depends on content type */}
+          <div
+            className="relative bg-black rounded-2xl overflow-hidden shadow-2xl flex-shrink-0 transition-all duration-300"
+            style={{
+              height: 'min(calc(100vh - 48px), 100vh)',
+              aspectRatio: activeStory.type === 'VIDEO' ? '16/9' : '9/16',
+            }}
+          >
+            {/* Progress bars */}
+            <div className="absolute top-0 inset-x-0 z-20 flex gap-1 px-3 pt-3">
+              {activeGroup.stories.map((_, i) => (
+                <div key={i} className="flex-1 h-[3px] rounded-full bg-white/30 overflow-hidden">
+                  <div className={`h-full rounded-full bg-white ${i < storyIndex ? 'w-full' : i === storyIndex && activeStory.type === 'IMAGE' ? 'animate-[storyProgress_5s_linear_forwards]' : 'w-0'}`} />
+                </div>
+              ))}
+            </div>
+
+            {/* Header */}
+            <div className="absolute top-7 inset-x-0 z-20 flex items-center gap-2.5 px-3 pt-1.5">
+              <Avatar src={activeGroup.author.avatar} name={activeGroup.author.displayName} size="sm" className="ring-2 ring-white/70 shadow" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white drop-shadow truncate">{activeGroup.author.displayName}</p>
+                <p className="text-[11px] text-white/65">{storyIndex + 1}/{activeGroup.stories.length} · Tự ẩn sau 24 giờ</p>
+              </div>
+              {/* 3-dot menu — owner only */}
+              {isOwnerViewing && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowMenu(v => !v)}
+                    className="w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 transition-colors"
+                    aria-label="Tùy chọn"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" />
+                    </svg>
+                  </button>
+                  {showMenu && (
+                    <div className="absolute right-0 top-10 z-30 bg-white rounded-xl shadow-xl border border-gray-100 py-1 min-w-[140px] overflow-hidden">
+                      <button
+                        onClick={() => { setShowMenu(false); if (confirm('Xóa tin này?')) deleteMutation.mutate(activeStory.id) }}
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Xóa tin
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Media */}
             {activeStory.type === 'VIDEO' ? (
-              <video
-                src={activeStory.mediaUrl}
-                className="w-full max-h-[70vh] object-contain"
-                controls
-                autoPlay
-                playsInline
-                onEnded={goNext}
-              />
+              <video key={activeStory.id} src={activeStory.mediaUrl} className="w-full h-full object-cover" autoPlay playsInline onEnded={goNext} />
             ) : (
-              <img src={activeStory.mediaUrl} alt="Story" className="w-full max-h-[70vh] object-contain" />
+              <img key={activeStory.id} src={activeStory.mediaUrl} alt="Story" className="w-full h-full object-cover" />
             )}
+
+            {/* Caption */}
+            {activeStory.content && (
+              <div className="absolute bottom-16 inset-x-0 z-20 px-4 pointer-events-none">
+                <p className="text-sm text-white font-medium drop-shadow-lg whitespace-pre-wrap text-center bg-black/35 rounded-xl px-3 py-2">{activeStory.content}</p>
+              </div>
+            )}
+
+            {/* Viewer count — owner only */}
+            {isOwnerViewing && (
+              <div className="absolute bottom-0 inset-x-0 z-20">
+                <button
+                  className="w-full flex items-center gap-2 px-4 py-3 bg-gradient-to-t from-black/75 to-transparent text-white"
+                  onClick={() => setShowViewers(v => !v)}
+                  aria-label="Xem danh sách người đã xem"
+                >
+                  <svg className={`w-4 h-4 transition-transform duration-200 ${showViewers ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                  </svg>
+                  <span className="text-sm font-bold">{viewersQuery.isLoading ? 'Đang tải...' : `${viewerCount} người xem`}</span>
+                </button>
+                {showViewers && (
+                  <div className="bg-black/85 backdrop-blur-md max-h-52 overflow-y-auto px-4 pb-4 pt-1 space-y-3">
+                    {!viewersQuery.data?.length ? (
+                      <p className="text-xs text-white/50 py-2 text-center">Chưa có ai xem tin này.</p>
+                    ) : (
+                      viewersQuery.data.map((entry) => (
+                        <div key={`${entry.user.id}-${entry.viewedAt}`} className="flex items-center gap-2.5">
+                          <Avatar src={entry.user.avatar} name={entry.user.displayName} size="xs" className="ring-1 ring-white/30" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-white truncate">{entry.user.displayName}</p>
+                            <p className="text-[11px] text-white/50">{new Date(entry.viewedAt).toLocaleString('vi-VN')}</p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tap zones */}
+            <button className="absolute left-0 top-0 bottom-0 w-1/3 z-10" onClick={goPrev} disabled={!canGoPrev} aria-label="Tin trước" />
+            <button className="absolute right-0 top-0 bottom-0 w-1/3 z-10" onClick={goNext} aria-label="Tin tiếp" />
           </div>
 
-          {activeStory.content && (
-            <p className="mt-3 text-sm text-text-primary whitespace-pre-wrap">{activeStory.content}</p>
+          {/* Prev / Next arrows */}
+          <button
+            onClick={goPrev}
+            disabled={!canGoPrev}
+            className="absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center disabled:opacity-20 transition-all"
+            aria-label="Tin trước"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <button
+            onClick={goNext}
+            className="absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all"
+            aria-label="Tin tiếp"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* ── MOBILE LAYOUT (< md): true fullscreen ── */}
+      <div className="md:hidden h-full w-full">
+        <div
+          className="relative bg-black w-full h-full overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Progress bars */}
+          <div className="absolute top-0 inset-x-0 z-20 flex gap-1 px-3 pt-3">
+            {activeGroup.stories.map((_, i) => (
+              <div key={i} className="flex-1 h-[3px] rounded-full bg-white/30 overflow-hidden">
+                <div className={`h-full rounded-full bg-white ${i < storyIndex ? 'w-full' : i === storyIndex && activeStory.type === 'IMAGE' ? 'animate-[storyProgress_5s_linear_forwards]' : 'w-0'}`} />
+              </div>
+            ))}
+          </div>
+
+          {/* Header */}
+          <div className="absolute top-7 inset-x-0 z-20 flex items-center gap-2.5 px-3 pt-1.5">
+            <Avatar src={activeGroup.author.avatar} name={activeGroup.author.displayName} size="sm" className="ring-2 ring-white/70 shadow" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-white drop-shadow truncate">{activeGroup.author.displayName}</p>
+              <p className="text-[11px] text-white/65">{storyIndex + 1}/{activeGroup.stories.length} · Tự ẩn sau 24 giờ</p>
+            </div>
+            {/* 3-dot menu — owner only */}
+            {isOwnerViewing && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowMenu(v => !v)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 transition-colors"
+                  aria-label="Tùy chọn"
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" />
+                  </svg>
+                </button>
+                {showMenu && (
+                  <div className="absolute right-0 top-10 z-30 bg-white rounded-xl shadow-xl border border-gray-100 py-1 min-w-[140px] overflow-hidden">
+                    <button
+                      onClick={() => { setShowMenu(false); if (confirm('Xóa tin này?')) deleteMutation.mutate(activeStory.id) }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Xóa tin
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 transition-colors" aria-label="Đóng">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Media */}
+          {activeStory.type === 'VIDEO' ? (
+            <video key={activeStory.id} src={activeStory.mediaUrl} className="w-full h-full object-cover" autoPlay playsInline onEnded={goNext} />
+          ) : (
+            <img key={activeStory.id} src={activeStory.mediaUrl} alt="Story" className="w-full h-full object-cover" />
           )}
 
+          {/* Caption */}
+          {activeStory.content && (
+            <div className="absolute bottom-16 inset-x-0 z-20 px-4 pointer-events-none">
+              <p className="text-sm text-white font-medium drop-shadow-lg whitespace-pre-wrap text-center bg-black/35 rounded-xl px-3 py-2">{activeStory.content}</p>
+            </div>
+          )}
+
+          {/* Viewer count — owner only */}
           {isOwnerViewing && (
-            <div className="mt-3 rounded-lg border border-border-light bg-app-bg p-3">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-semibold text-text-primary">
-                  Người đã xem ({viewersQuery.data?.length ?? 0})
-                </p>
-              </div>
-              {viewersQuery.isLoading ? (
-                <p className="text-xs text-text-secondary">Đang tải danh sách...</p>
-              ) : !viewersQuery.data?.length ? (
-                <p className="text-xs text-text-secondary">Chưa có ai xem tin này.</p>
-              ) : (
-                <div className="max-h-36 overflow-y-auto space-y-2">
-                  {viewersQuery.data.map((entry) => (
-                    <div key={`${entry.user.id}-${entry.viewedAt}`} className="flex items-center gap-2">
-                      <Avatar src={entry.user.avatar} name={entry.user.displayName} size="xs" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium text-text-primary truncate">{entry.user.displayName}</p>
-                        <p className="text-[11px] text-text-secondary">
-                          {new Date(entry.viewedAt).toLocaleString()}
-                        </p>
+            <div className="absolute bottom-0 inset-x-0 z-20">
+              <button
+                className="w-full flex items-center gap-2 px-4 py-3 bg-gradient-to-t from-black/75 to-transparent text-white"
+                onClick={() => setShowViewers(v => !v)}
+                aria-label="Xem danh sách người đã xem"
+              >
+                <svg className={`w-4 h-4 transition-transform duration-200 ${showViewers ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                </svg>
+                <span className="text-sm font-bold">{viewersQuery.isLoading ? 'Đang tải...' : `${viewerCount} người xem`}</span>
+              </button>
+              {showViewers && (
+                <div className="bg-black/85 backdrop-blur-md max-h-52 overflow-y-auto px-4 pb-4 pt-1 space-y-3">
+                  {!viewersQuery.data?.length ? (
+                    <p className="text-xs text-white/50 py-2 text-center">Chưa có ai xem tin này.</p>
+                  ) : (
+                    viewersQuery.data.map((entry) => (
+                      <div key={`${entry.user.id}-${entry.viewedAt}`} className="flex items-center gap-2.5">
+                        <Avatar src={entry.user.avatar} name={entry.user.displayName} size="xs" className="ring-1 ring-white/30" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-white truncate">{entry.user.displayName}</p>
+                          <p className="text-[11px] text-white/50">{new Date(entry.viewedAt).toLocaleString('vi-VN')}</p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               )}
             </div>
           )}
 
-          <div className="flex items-center justify-between mt-3 gap-2">
-            <Button variant="secondary" size="sm" onClick={goPrev} disabled={groupIndex === 0 && storyIndex === 0}>Tin trước</Button>
-            <span className="text-xs text-text-secondary">Nhóm {groupIndex + 1}/{groups.length}</span>
-            <Button variant="secondary" size="sm" onClick={goNext}>Tin tiếp</Button>
-          </div>
+          {/* Tap zones */}
+          <button className="absolute left-0 top-0 bottom-0 w-1/3 z-10" onClick={goPrev} disabled={!canGoPrev} aria-label="Tin trước" />
+          <button className="absolute right-0 top-0 bottom-0 w-1/3 z-10" onClick={goNext} aria-label="Tin tiếp" />
         </div>
-      )}
-    </Modal>
+      </div>
+    </div>,
+    document.body
   )
 }
 
@@ -658,6 +946,7 @@ export default function FeedPage() {
   const navigate = useNavigate()
   const toast = useToast()
   const queryClient = useQueryClient()
+  const { user } = useAuthStore()
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
   const pullStartYRef = useRef<number | null>(null)
   const isPullingRef = useRef(false)
@@ -713,7 +1002,7 @@ export default function FeedPage() {
   }, [viewedMutation])
 
   const posts = data?.pages.flatMap(p => p.data) ?? []
-  const storyGroups = useMemo(() => groupStoriesByAuthor(storiesQuery.data ?? []), [storiesQuery.data])
+  const storyGroups = useMemo(() => groupStoriesByAuthor(storiesQuery.data ?? [], user?.id), [storiesQuery.data, user?.id])
 
   useEffect(() => {
     pullDistanceRef.current = pullDistance

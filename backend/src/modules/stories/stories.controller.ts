@@ -37,4 +37,11 @@ export const storiesController = {
       sendSuccess(res, viewers)
     } catch (err) { next(err) }
   },
+
+  async deleteStory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await storiesService.deleteStory(String(req.params.id), req.user!.userId)
+      sendSuccess(res, result, 'Xóa tin thành công')
+    } catch (err) { next(err) }
+  },
 }

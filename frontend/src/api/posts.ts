@@ -109,11 +109,11 @@ function normalizePost(raw: any): Post {
     authorId: raw.author?.userId ?? raw.authorId ?? '',
     author: author
       ? {
-          id: author.id,
-          displayName: author.displayName,
-          avatar: author.avatar,
-          username: author.username,
-        }
+        id: author.id,
+        displayName: author.displayName,
+        avatar: author.avatar,
+        username: author.username,
+      }
       : undefined,
     groupId: raw.groupId && raw.groupId !== 'null' ? raw.groupId : undefined,
     groupName: raw.groupName ?? undefined,
@@ -143,10 +143,10 @@ function normalizeComment(raw: any): Comment {
     authorId: raw.author?.userId ?? raw.authorId ?? '',
     author: author
       ? {
-          id: author.id,
-          displayName: author.displayName,
-          avatar: author.avatar,
-        }
+        id: author.id,
+        displayName: author.displayName,
+        avatar: author.avatar,
+      }
       : undefined,
     likesCount: toNumber(raw.likesCount),
     isLiked: !!raw.isLiked,
