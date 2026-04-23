@@ -70,9 +70,12 @@ export function normalizeUser(raw: any): FrontendUser {
   const email = raw?.email ?? ''
   const avatar = raw?.avatarUrl ?? raw?.avatar
   const coverPhoto = raw?.coverUrl ?? raw?.coverPhoto
+  // Sanitize userId: some Neo4j records may have spaces instead of hyphens in UUID
+  const rawId = raw?.userId ?? raw?.id ?? ''
+  const id = typeof rawId === 'string' ? rawId.trim().replace(/\s+/g, '-') : String(rawId)
   return {
-    id: raw?.userId ?? raw?.id ?? '',
-    userId: raw?.userId ?? raw?.id,
+    id,
+    userId: id,
     email,
     username: raw?.username ?? (email.includes('@') ? email.split('@')[0] : ''),
     displayName: raw?.displayName ?? '',

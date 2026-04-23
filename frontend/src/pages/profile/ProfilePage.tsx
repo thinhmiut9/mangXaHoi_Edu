@@ -1,4 +1,5 @@
-import { ChangeEvent, useCallback, useMemo, useState } from 'react'
+import { ChangeEvent, useCallback, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { usersApi } from '@/api/users'
@@ -18,6 +19,7 @@ import { useToast } from '@/components/ui/Toast'
 import { extractError } from '@/api/client'
 import { usePullToRefresh } from '@/hooks/usePullToRefresh'
 import { PullToRefreshIndicator } from '@/components/ui/PullToRefreshIndicator'
+import { ImageCropModal } from '@/components/ui/ImageCropModal'
 
 const TABS = ['Bài viết', 'Giới thiệu', 'Tài liệu', 'Bạn bè', 'Ảnh'] as const
 
@@ -30,7 +32,7 @@ type EditProfileForm = {
   location: string
   avatar: string
   coverPhoto: string
-  profileVisibility: 'PUBLIC' | 'FRIENDS' | 'PRIVATE'
+  profileVisibility: 'PUBLIC' | 'PRIVATE'
 }
 
 const VISIBILITY_LABEL: Record<'PUBLIC' | 'FRIENDS' | 'PRIVATE', string> = {
@@ -118,6 +120,15 @@ export default function ProfilePage() {
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [avatarPreview, setAvatarPreview] = useState<string>('')
   const [coverPreview, setCoverPreview] = useState<string>('')
+  // Photo popup menus
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false)
+  const [coverMenuOpen, setCoverMenuOpen] = useState(false)
+  const [photoViewSrc, setPhotoViewSrc] = useState<string | null>(null)
+  // Crop modal
+  const [cropSrc, setCropSrc] = useState<string | null>(null)
+  const [cropMode, setCropMode] = useState<'avatar' | 'cover'>('avatar')
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+  const coverInputRef = useRef<HTMLInputElement>(null)
 
   const { data: profile, isLoading: profileLoading, refetch: refetchProfile } = useQuery({
     queryKey: ['profile', id],
@@ -296,6 +307,8 @@ export default function ProfilePage() {
   const hasSentRequest = !!sentRequests?.some((u) => u.id === id)
   const hasReceivedRequest = !!requests?.some((u) => u.id === id)
   const isBlocked = !!blockedUsers?.some((u) => u.id === id)
+  const canViewPrivateContent = !!(profile as { canViewPrivateContent?: boolean } | undefined)?.canViewPrivateContent
+  const isPrivateContentLocked = profile?.profileVisibility === 'PRIVATE' && !canViewPrivateContent
 
   const postImages = useMemo(
     () => posts.flatMap((post) => post.imageUrls ?? post.images ?? []).filter(Boolean),
@@ -369,10 +382,10 @@ export default function ProfilePage() {
     ? `Tham gia tháng ${joinedDate.getMonth() + 1}, ${joinedDate.getFullYear()}`
     : 'Tham gia gần đây'
   const statCards = [
-    { label: 'Bài viết', value: profileStats?.postsCount ?? 0, color: 'bg-blue-500' },
-    { label: 'Bạn bè', value: profileStats?.friendsCount ?? 0, color: 'bg-emerald-500' },
+    { label: 'Bài viết', value: isPrivateContentLocked ? 0 : profileStats?.postsCount ?? 0, color: 'bg-blue-500' },
+    { label: 'Bạn bè', value: isPrivateContentLocked ? 0 : profileStats?.friendsCount ?? 0, color: 'bg-emerald-500' },
     { label: 'Nhóm', value: profileStats?.groupsCount ?? 0, color: 'bg-violet-500' },
-    { label: 'Tài liệu', value: featuredDocuments.length, color: 'bg-amber-500' },
+    { label: 'Tài liệu', value: isPrivateContentLocked ? 0 : featuredDocuments.length, color: 'bg-amber-500' },
     { label: 'Kỹ năng', value: profileSkills.length, color: 'bg-pink-500' },
   ] as const
 
@@ -384,13 +397,80 @@ export default function ProfilePage() {
       location: profile.location ?? '',
       avatar: profile.avatar ?? '',
       coverPhoto: profile.coverPhoto ?? '',
-      profileVisibility: profile.profileVisibility ?? 'PUBLIC',
+      profileVisibility: profile.profileVisibility === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
     })
     setAvatarFile(null)
     setCoverFile(null)
     setAvatarPreview('')
     setCoverPreview('')
     setEditOpen(true)
+  }
+
+  // When file is selected -> open crop modal (don't upload yet)
+  const handleAvatarFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (avatarInputRef.current) avatarInputRef.current.value = ''
+    if (!file) return
+    setAvatarMenuOpen(false)
+    const objectUrl = URL.createObjectURL(file)
+    setCropMode('avatar')
+    setCropSrc(objectUrl)
+  }
+
+  const handleCoverFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (coverInputRef.current) coverInputRef.current.value = ''
+    if (!file) return
+    setCoverMenuOpen(false)
+    const objectUrl = URL.createObjectURL(file)
+    setCropMode('cover')
+    setCropSrc(objectUrl)
+  }
+
+  // After crop confirm -> upload
+  const handleCropConfirm = async (blob: Blob) => {
+    const file = new File([blob], cropMode === 'avatar' ? 'avatar.jpg' : 'cover.jpg', { type: 'image/jpeg' })
+    if (cropSrc) URL.revokeObjectURL(cropSrc)
+    setCropSrc(null)
+    try {
+      if (cropMode === 'avatar') {
+        const upload = await uploadsApi.uploadAvatar(file)
+        await usersApi.updateProfile({ avatar: upload.url })
+        if (currentUser?.id === id) updateUser({ avatar: upload.url })
+        toast.success('Đã cập nhật ảnh đại diện')
+      } else {
+        const upload = await uploadsApi.uploadImage(file, 'covers')
+        await usersApi.updateProfile({ coverPhoto: upload.url })
+        if (currentUser?.id === id) updateUser({ coverPhoto: upload.url })
+        toast.success('Đã cập nhật ảnh bìa')
+      }
+      queryClient.invalidateQueries({ queryKey: ['profile', id] })
+    } catch (err) { toast.error(extractError(err)) }
+  }
+
+  const handleCropCancel = () => {
+    if (cropSrc) URL.revokeObjectURL(cropSrc)
+    setCropSrc(null)
+  }
+
+  const handleDeleteAvatar = async () => {
+    setAvatarMenuOpen(false)
+    try {
+      await usersApi.updateProfile({ avatar: '' })
+      if (currentUser?.id === id) updateUser({ avatar: '' })
+      queryClient.invalidateQueries({ queryKey: ['profile', id] })
+      toast.success('Đã xóa ảnh đại diện')
+    } catch (err) { toast.error(extractError(err)) }
+  }
+
+  const handleDeleteCover = async () => {
+    setCoverMenuOpen(false)
+    try {
+      await usersApi.updateProfile({ coverPhoto: '' })
+      if (currentUser?.id === id) updateUser({ coverPhoto: '' })
+      queryClient.invalidateQueries({ queryKey: ['profile', id] })
+      toast.success('Đã xóa ảnh bìa')
+    } catch (err) { toast.error(extractError(err)) }
   }
 
   const onAvatarFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -463,17 +543,93 @@ export default function ProfilePage() {
     <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-4">
       <section className="space-y-4 min-w-0">
         <div className="bg-white rounded-none sm:rounded-2xl sm:border border-border-light shadow-card overflow-hidden">
-          {/* Cover photo */}
-          <div className="h-28 sm:h-36 md:h-44 bg-gradient-to-br from-slate-200 via-slate-300 to-slate-400 relative">
+          {/* Cover photo — clickable for own profile */}
+          <div className="h-28 sm:h-36 md:h-44 bg-gradient-to-br from-slate-200 via-slate-300 to-slate-400 relative group/cover">
             {profile.coverPhoto && <img src={profile.coverPhoto} alt="Ảnh bìa" className="w-full h-full object-cover" />}
+            {isOwnProfile && (
+              <>
+                <button type="button" onClick={() => setCoverMenuOpen(v => !v)}
+                  className="absolute inset-0 w-full flex items-center justify-center bg-black/0 group-hover/cover:bg-black/30 transition-colors cursor-pointer"
+                  aria-label="Tùy chọn ảnh bìa">
+                  <span className="opacity-0 group-hover/cover:opacity-100 transition-opacity bg-white/90 rounded-full px-3 py-1.5 text-xs font-semibold text-slate-700 flex items-center gap-1.5 shadow">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 0 1 2-2h.93a2 2 0 0 0 1.664-.89l.812-1.22A2 2 0 0 1 10.07 4h3.86a2 2 0 0 1 1.664.89l.812 1.22A2 2 0 0 0 18.07 7H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
+                    Thay đổi ảnh bìa
+                  </span>
+                </button>
+                {coverMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setCoverMenuOpen(false)} />
+                    <div className="absolute bottom-3 right-3 z-40 w-52 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden">
+                      {profile.coverPhoto && (
+                        <button type="button" onClick={() => { setCoverMenuOpen(false); setPhotoViewSrc(profile.coverPhoto!) }}
+                          className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                          <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                          Xem ảnh bìa
+                        </button>
+                      )}
+                      <label className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer">
+                        <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 0 1 2-2h.93a2 2 0 0 0 1.664-.89l.812-1.22A2 2 0 0 1 10.07 4h3.86a2 2 0 0 1 1.664.89l.812 1.22A2 2 0 0 0 18.07 7H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
+                        Tải ảnh bìa mới
+                        <input type="file" accept="image/*" className="hidden" onChange={handleCoverFileChange} />
+                      </label>
+                      {profile.coverPhoto && (
+                        <button type="button" onClick={handleDeleteCover}
+                          className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-red-500 hover:bg-red-50 transition-colors border-t border-slate-100">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                          Xóa ảnh bìa
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
           </div>
 
           <div className="px-3 sm:px-4 md:px-5 pb-3">
             {/* Avatar + name row */}
             <div className="flex flex-col sm:flex-row sm:items-start sm:gap-4">
-              {/* Avatar - floats out of cover */}
-              <div className="-mt-10 sm:-mt-12 mb-2 sm:mb-0 shrink-0 border-[3px] border-white rounded-full shadow-md self-start">
+              {/* Avatar - floats out of cover, clickable for own profile */}
+              <div className="relative -mt-10 sm:-mt-12 mb-2 sm:mb-0 shrink-0 border-[3px] border-white rounded-full shadow-md self-start group/avatar">
                 <Avatar src={profile.avatar} name={profile.displayName} size="2xl" online={true} />
+                {isOwnProfile && (
+                  <>
+                    <button type="button" onClick={() => setAvatarMenuOpen(v => !v)}
+                      className="absolute inset-0 rounded-full bg-black/0 group-hover/avatar:bg-black/35 flex items-center justify-center transition-colors"
+                      aria-label="Tùy chọn ảnh đại diện">
+                      <svg className="w-5 h-5 text-white opacity-0 group-hover/avatar:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 0 1 2-2h.93a2 2 0 0 0 1.664-.89l.812-1.22A2 2 0 0 1 10.07 4h3.86a2 2 0 0 1 1.664.89l.812 1.22A2 2 0 0 0 18.07 7H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z"/>
+                        <circle cx="12" cy="13" r="3"/>
+                      </svg>
+                    </button>
+                    {avatarMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-30" onClick={() => setAvatarMenuOpen(false)} />
+                        <div className="absolute top-full left-0 mt-1 z-40 w-52 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden">
+                          {profile.avatar && (
+                            <button type="button" onClick={() => { setAvatarMenuOpen(false); setPhotoViewSrc(profile.avatar!) }}
+                              className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                              <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                              Xem ảnh đại diện
+                            </button>
+                          )}
+                          <label className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer">
+                            <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 0 1 2-2h.93a2 2 0 0 0 1.664-.89l.812-1.22A2 2 0 0 1 10.07 4h3.86a2 2 0 0 1 1.664.89l.812 1.22A2 2 0 0 0 18.07 7H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
+                            Thêm/Thay đổi ảnh
+                            <input type="file" accept="image/*" className="hidden" onChange={handleAvatarFileChange} />
+                          </label>
+                          {profile.avatar && (
+                            <button type="button" onClick={handleDeleteAvatar}
+                              className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-red-500 hover:bg-red-50 transition-colors border-t border-slate-100">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                              Xóa ảnh đại diện
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
               </div>
 
               {/* Name + info */}
@@ -595,7 +751,9 @@ export default function ProfilePage() {
         </div>
 
         {activeTab === 'Bài viết' && (
-          postsLoading ? (
+          isPrivateContentLocked ? (
+            <EmptyState title="Trang cá nhân đã khóa" description="Chỉ bạn bè mới xem được bài viết của người dùng này." icon={<span className="text-3xl">🔒</span>} />
+          ) : postsLoading ? (
             <PostSkeleton />
           ) : posts.length === 0 ? (
             <EmptyState title="Chưa có bài viết nào" description="Bài viết sẽ xuất hiện ở đây" icon={<span className="text-3xl">📝</span>} />
@@ -619,7 +777,9 @@ export default function ProfilePage() {
 
         {activeTab === 'Tài liệu' && (
           <div className="bg-white rounded-2xl border border-border-light p-4 shadow-card">
-            {featuredDocuments.length === 0 ? (
+            {isPrivateContentLocked ? (
+              <EmptyState title="Trang cá nhân đã khóa" description="Chỉ bạn bè mới xem được tài liệu của người dùng này." icon={<span className="text-3xl">🔒</span>} />
+            ) : featuredDocuments.length === 0 ? (
               <EmptyState title="Chưa có tài liệu" description="Bạn có thể đăng bài kèm tài liệu để hiển thị tại đây." icon={<span className="text-3xl">📄</span>} />
             ) : (
               <div className="space-y-2">
@@ -635,7 +795,9 @@ export default function ProfilePage() {
         )}
 
         {activeTab === 'Bạn bè' && (
-          friendsLoading ? (
+          isPrivateContentLocked ? (
+            <EmptyState title="Trang cá nhân đã khóa" description="Chỉ bạn bè mới xem được danh sách bạn bè của người dùng này." icon={<span className="text-3xl">🔒</span>} />
+          ) : friendsLoading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{Array.from({ length: 4 }).map((_, i) => <PostSkeleton key={i} />)}</div>
           ) : userFriends.length === 0 ? (
             <EmptyState title="Chưa có bạn bè" description="Danh sách bạn bè sẽ hiển thị ở đây" icon={<span className="text-3xl">👥</span>} />
@@ -655,7 +817,9 @@ export default function ProfilePage() {
         )}
 
         {activeTab === 'Ảnh' && (
-          postImages.length === 0 ? (
+          isPrivateContentLocked ? (
+            <EmptyState title="Trang cá nhân đã khóa" description="Chỉ bạn bè mới xem được ảnh từ bài viết của người dùng này." icon={<span className="text-3xl">🔒</span>} />
+          ) : postImages.length === 0 ? (
             <EmptyState title="Chưa có ảnh" description="Ảnh từ các bài viết sẽ hiển thị ở đây" icon={<span className="text-3xl">🖼️</span>} />
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -680,7 +844,7 @@ export default function ProfilePage() {
         </div>
 
         <div className="bg-white rounded-2xl border border-border-light p-4 shadow-card">
-          <h3 className="text-sm font-bold text-slate-900">Tài liệu nổi bật</h3>
+          <h3 className="text-sm font-bold text-slate-900">Tài liệu</h3>
           <div className="mt-3 space-y-2">
             {featuredDocuments.slice(0, 2).map((doc) => (
               <div key={doc.id} className="rounded-xl border border-border-light px-3 py-2">
@@ -753,36 +917,83 @@ export default function ProfilePage() {
               className="w-full h-10 rounded-md border border-border-main bg-white px-3 text-base text-text-primary focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             >
               <option value="PUBLIC">Công khai</option>
-              <option value="FRIENDS">Bạn bè</option>
               <option value="PRIVATE">Riêng tư</option>
             </select>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-text-primary">Ảnh đại diện</p>
-              <div className="flex items-center gap-3">
-                <Avatar src={avatarPreview || editForm.avatar} name={editForm.displayName || 'User'} size="lg" />
-                <input type="file" accept="image/*" onChange={onAvatarFileChange} />
-              </div>
+          {/* Profile lock toggle — Facebook style */}
+          <div className="flex items-start gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <div className={`mt-0.5 flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+              editForm.profileVisibility === 'PRIVATE' ? 'bg-rose-100 text-rose-600' :
+              'bg-emerald-100 text-emerald-600'
+            }`}>
+              {editForm.profileVisibility === 'PRIVATE' ? (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              )}
             </div>
-
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-text-primary">Ảnh bìa</p>
-              <div className="flex items-center gap-3">
-                <div className="w-14 h-14 rounded-md overflow-hidden bg-app-bg border border-border-light shrink-0">
-                  {(coverPreview || editForm.coverPhoto) ? (
-                    <img src={coverPreview || editForm.coverPhoto} alt="Preview cover" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-xs text-text-muted">?</div>
-                  )}
-                </div>
-                <input type="file" accept="image/*" onChange={onCoverFileChange} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-slate-900">Khóa trang cá nhân</p>
+              <p className="mt-0.5 text-xs text-slate-500 leading-relaxed">
+                {editForm.profileVisibility === 'PRIVATE'
+                  ? 'Trang cá nhân đang bị khóa: người khác chỉ xem được thông tin cơ bản, bạn bè mới xem được bài viết và nội dung khác.'
+                  : 'Trang cá nhân đang công khai với tất cả mọi người.'}
+              </p>
+              <div className="mt-3 flex gap-2">
+                {(['PUBLIC', 'PRIVATE'] as const).map((v) => (
+                  <button key={v} type="button"
+                    onClick={() => setEditForm(prev => ({ ...prev, profileVisibility: v }))}
+                    className={`flex-1 text-xs font-medium py-1.5 rounded-lg border transition-colors ${
+                      editForm.profileVisibility === v
+                        ? v === 'PRIVATE' ? 'bg-rose-500 text-white border-rose-500'
+                          : 'bg-emerald-500 text-white border-emerald-500'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    }`}>
+                    {v === 'PUBLIC' ? 'Công khai' : 'Riêng tư'}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
         </div>
       </Modal>
+
+      {/* Photo viewer lightbox — rendered via portal to escape z-index stacking */}
+      {photoViewSrc && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-sm"
+          onClick={() => setPhotoViewSrc(null)}
+        >
+          <button
+            type="button"
+            className="absolute top-4 right-4 text-white/80 hover:text-white bg-black/40 rounded-full p-2 transition-colors"
+            onClick={() => setPhotoViewSrc(null)}
+            aria-label="Đóng"
+          >
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+          <img
+            src={photoViewSrc}
+            alt="Xem ảnh"
+            className="max-w-[92vw] max-h-[92vh] rounded-2xl object-contain shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>,
+        document.body,
+      )}
+
+      {/* Crop modal */}
+      {cropSrc && (
+        <ImageCropModal
+          src={cropSrc}
+          mode={cropMode}
+          onConfirm={handleCropConfirm}
+          onCancel={handleCropCancel}
+        />
+      )}
 
       <Modal
         open={!!statModal}

@@ -38,6 +38,13 @@ export const authController = {
     } catch (err) { next(err) }
   },
 
+  async changePassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      await authService.changePassword(req.user!.userId, req.body)
+      sendSuccess(res, null, 'Đổi mật khẩu thành công')
+    } catch (err) { next(err) }
+  },
+
   logout(_req: Request, res: Response) {
     // JWT is stateless — client should discard the token
     sendSuccess(res, null, 'Đăng xuất thành công')

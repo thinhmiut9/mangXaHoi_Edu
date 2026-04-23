@@ -70,57 +70,101 @@ function scoreUser(user: UserPublic, keywordNorm: string): number {
   return best
 }
 
+async function canViewPrivateContent(viewerId: string | undefined, ownerId: string): Promise<boolean> {
+  if (!viewerId) return false
+  if (viewerId === ownerId) return true
+  const relation = await friendsRepository.getStatus(viewerId, ownerId)
+  return relation.status === 'ACCEPTED'
+}
+
+async function ensurePrivateContentVisibleToViewer(
+  profileVisibility: 'PUBLIC' | 'FRIENDS' | 'PRIVATE' | undefined,
+  viewerId: string,
+  ownerId: string
+) {
+  const visibility = profileVisibility ?? 'PUBLIC'
+  if (visibility === 'PUBLIC') return
+
+  const allowed = await canViewPrivateContent(viewerId, ownerId)
+  if (!allowed) {
+    throw new AppError('Ban khong co quyen xem ho so nay', 403, 'PROFILE_FRIENDS_ONLY')
+  }
+}
+
 export const usersService = {
   async getProfile(userId: string, viewerId?: string) {
     const user = await usersRepository.findById(userId)
     if (!user || user.status === 'BLOCKED') {
-      throw new AppError('Người dùng không tồn tại', 404, 'USER_NOT_FOUND')
+      throw new AppError('Nguoi dung khong ton tai', 404, 'USER_NOT_FOUND')
     }
-    if (viewerId && viewerId !== userId) {
-      const blocked = await friendsRepository.isBlockedBetween(viewerId, userId)
+    const ownerId = user.userId
+
+    if (viewerId && viewerId !== ownerId) {
+      const blocked = await friendsRepository.isBlockedBetween(viewerId, ownerId)
       if (blocked) {
-        throw new AppError('Người dùng không tồn tại', 404, 'USER_NOT_FOUND')
+        throw new AppError('Nguoi dung khong ton tai', 404, 'USER_NOT_FOUND')
       }
     }
-    const stats = await usersRepository.getStats(userId)
-    const isOwnProfile = viewerId === userId
-    return { ...sanitizeUser(user), ...stats, isOwnProfile }
+
+    const stats = await usersRepository.getStats(ownerId)
+    const isOwnProfile = viewerId === ownerId
+    const canViewPrivate = await canViewPrivateContent(viewerId, ownerId)
+    return { ...sanitizeUser(user), ...stats, isOwnProfile, canViewPrivateContent: canViewPrivate }
   },
 
   async getProfileByUsername(username: string, viewerId?: string) {
     const user = await usersRepository.findByUsername(username)
     if (!user || user.status === 'BLOCKED') {
-      throw new AppError('Người dùng không tồn tại', 404, 'USER_NOT_FOUND')
+      throw new AppError('Nguoi dung khong ton tai', 404, 'USER_NOT_FOUND')
     }
+
     if (viewerId && viewerId !== user.userId) {
       const blocked = await friendsRepository.isBlockedBetween(viewerId, user.userId)
       if (blocked) {
-        throw new AppError('Người dùng không tồn tại', 404, 'USER_NOT_FOUND')
+        throw new AppError('Nguoi dung khong ton tai', 404, 'USER_NOT_FOUND')
       }
     }
+
     const stats = await usersRepository.getStats(user.userId)
     const isOwnProfile = viewerId === user.userId
-    return { ...sanitizeUser(user), ...stats, isOwnProfile }
+    const canViewPrivate = await canViewPrivateContent(viewerId, user.userId)
+    return { ...sanitizeUser(user), ...stats, isOwnProfile, canViewPrivateContent: canViewPrivate }
   },
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
-    const updated = await usersRepository.update(userId, dto)
-    if (!updated) throw new AppError('Cập nhật thất bại', 500)
+    // Normalize empty string → null for avatar/cover (deletion case)
+    const normalized = {
+      ...dto,
+      avatarUrl: dto.avatarUrl === '' ? null : dto.avatarUrl,
+      coverUrl: dto.coverUrl === '' ? null : dto.coverUrl,
+    }
+    const updated = await usersRepository.update(userId, normalized as any)
+    if (!updated) throw new AppError('Cap nhat that bai', 500)
     return sanitizeUser(updated)
   },
 
   async getUserFriends(userId: string, viewerId?: string) {
     const user = await usersRepository.findById(userId)
     if (!user || user.status === 'BLOCKED') {
-      throw new AppError('Người dùng không tồn tại', 404, 'USER_NOT_FOUND')
+      throw new AppError('Nguoi dung khong ton tai', 404, 'USER_NOT_FOUND')
     }
-    if (viewerId && viewerId !== userId) {
-      const blocked = await friendsRepository.isBlockedBetween(viewerId, userId)
+    const ownerId = user.userId
+
+    if (viewerId && viewerId !== ownerId) {
+      const blocked = await friendsRepository.isBlockedBetween(viewerId, ownerId)
       if (blocked) {
-        throw new AppError('Người dùng không tồn tại', 404, 'USER_NOT_FOUND')
+        throw new AppError('Nguoi dung khong ton tai', 404, 'USER_NOT_FOUND')
+      }
+      const visibility = user.profileVisibility ?? 'PUBLIC'
+      if (visibility === 'PRIVATE') {
+        const allowed = await canViewPrivateContent(viewerId, ownerId)
+        if (!allowed) return []
+      } else {
+        await ensurePrivateContentVisibleToViewer(user.profileVisibility, viewerId, ownerId)
       }
     }
-    return friendsRepository.getFriends(userId, 0, 300)
+
+    return friendsRepository.getFriends(ownerId, 0, 300)
   },
 
   async searchUsers(viewerId: string, q: string, page: number, limit: number) {

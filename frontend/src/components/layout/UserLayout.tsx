@@ -2,6 +2,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { TopBar } from './TopBar'
 import { LeftSidebar } from './LeftSidebar'
 import { RightPanel } from './RightPanel'
+import { FloatingChat } from './FloatingChat'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/authStore'
@@ -9,9 +10,12 @@ import { connectSocket, disconnectSocket, emitCallReject } from '@/socket/socket
 import { useNotificationStore } from '@/store/notificationStore'
 import { authApi } from '@/api/auth'
 import { Notification, notificationsApi } from '@/api/index'
+import { friendsApi } from '@/api/users'
 import { useToast } from '@/components/ui/Toast'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
+import { SettingsPanel } from '@/components/settings/SettingsPanel'
+import { cn } from '@/utils/cn'
 
 const PENDING_INCOMING_CALL_KEY = 'pendingIncomingCall'
 
@@ -24,7 +28,7 @@ interface IncomingCallPopupState {
 
 export default function UserLayout() {
   const { token, updateUser, clearAuth } = useAuthStore()
-  const { addNotification, setUnreadSummary } = useNotificationStore()
+  const { addNotification, setUnreadSummary, setFriendRequestCount } = useNotificationStore()
   const queryClient = useQueryClient()
   const location = useLocation()
   const isChatPage = location.pathname.startsWith('/chat')
@@ -34,18 +38,25 @@ export default function UserLayout() {
   const isNotificationsPage = location.pathname.startsWith('/notifications')
   const isFriendsPage = location.pathname.startsWith('/friends')
   const isSearchPage = location.pathname.startsWith('/search')
-  const isUnifiedWidePage = isGroupsPage || isFeedPage || isProfilePage || isNotificationsPage || isFriendsPage
-  const shouldShowRightPanel = !isChatPage && !isGroupsPage && !isProfilePage && !isSearchPage
+  const isDocumentsPage = location.pathname.startsWith('/documents')
+  const isUnifiedWidePage =
+    isGroupsPage || isFeedPage || isProfilePage || isNotificationsPage || isFriendsPage || isDocumentsPage
+  const shouldShowRightPanel = !isChatPage && !isGroupsPage && !isProfilePage && !isSearchPage && !isDocumentsPage
   const topPaddingClass = isChatPage ? 'pt-[56px]' : 'pt-[var(--topbar-height)]'
   const toast = useToast()
   const navigate = useNavigate()
   const [isXlUp, setIsXlUp] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia('(min-width: 1280px)').matches : false
   )
+  const [isLgUp, setIsLgUp] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : false
+  )
   // Dùng ref để tránh đưa location.pathname vào dependency array của socket effect
   const pathnameRef = useRef(location.pathname)
   const lastUnreadRefetchAtRef = useRef(0)
   const [incomingCallPopup, setIncomingCallPopup] = useState<IncomingCallPopupState | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [sidebarExpanded, setSidebarExpanded] = useState(false)
 
   const { data: unreadSummary, refetch: refetchUnreadSummary } = useQuery({
     queryKey: ['unread-summary'],
@@ -54,17 +65,36 @@ export default function UserLayout() {
     refetchOnWindowFocus: false,
   })
 
+  const { data: friendReqCount } = useQuery({
+    queryKey: ['friend-request-count'],
+    queryFn: friendsApi.getRequestCount,
+    enabled: !!token,
+    refetchInterval: 30_000, // check every 30s
+    staleTime: 20_000,
+  })
+
   useEffect(() => {
     if (!unreadSummary) return
     setUnreadSummary(unreadSummary)
   }, [unreadSummary, setUnreadSummary])
 
   useEffect(() => {
-    const media = window.matchMedia('(min-width: 1280px)')
-    const onChange = (event: MediaQueryListEvent) => setIsXlUp(event.matches)
-    setIsXlUp(media.matches)
-    media.addEventListener('change', onChange)
-    return () => media.removeEventListener('change', onChange)
+    setFriendRequestCount(friendReqCount ?? 0)
+  }, [friendReqCount, setFriendRequestCount])
+
+  useEffect(() => {
+    const mediaXl = window.matchMedia('(min-width: 1280px)')
+    const mediaLg = window.matchMedia('(min-width: 1024px)')
+    const onXlChange = (e: MediaQueryListEvent) => setIsXlUp(e.matches)
+    const onLgChange = (e: MediaQueryListEvent) => setIsLgUp(e.matches)
+    setIsXlUp(mediaXl.matches)
+    setIsLgUp(mediaLg.matches)
+    mediaXl.addEventListener('change', onXlChange)
+    mediaLg.addEventListener('change', onLgChange)
+    return () => {
+      mediaXl.removeEventListener('change', onXlChange)
+      mediaLg.removeEventListener('change', onLgChange)
+    }
   }, [])
 
   // Cập nhật ref mỗi khi pathname thay đổi mà không trigger socket effect
@@ -161,40 +191,118 @@ export default function UserLayout() {
       })
   }, [token, updateUser])
 
+  useEffect(() => {
+    const handleOpenSettingsModal = () => setSettingsOpen(true)
+    window.addEventListener('open-settings-modal', handleOpenSettingsModal)
+    return () => window.removeEventListener('open-settings-modal', handleOpenSettingsModal)
+  }, [])
+
+  useEffect(() => {
+    if (!settingsOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSettingsOpen(false)
+    }
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.body.style.overflow = originalOverflow
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [settingsOpen])
+
   return (
-    <div className="min-h-screen bg-app-bg">
+    <div className="min-h-screen overflow-x-hidden bg-app-bg">
       <TopBar />
       <div className={`flex ${topPaddingClass}`}>
-        {/* Left Sidebar */}
-        <aside className="hidden lg:flex flex-col fixed left-0 top-[var(--topbar-height)] bottom-0 w-[280px] overflow-y-auto p-2 border-r border-border-light bg-white/85 backdrop-blur-md">
+        {/* Left Sidebar — width-transitions in sync with main content */}
+        <aside
+          className="hidden lg:block fixed left-0 top-[var(--topbar-height)] bottom-0 overflow-y-auto overflow-x-hidden border-r border-border-light bg-white/95 backdrop-blur-xl transition-[width] duration-300 ease-in-out z-30"
+          style={{ width: sidebarExpanded ? 240 : 68 }}
+          onMouseEnter={() => setSidebarExpanded(true)}
+          onMouseLeave={() => setSidebarExpanded(false)}
+        >
           <LeftSidebar />
         </aside>
 
-        {/* Main Content */}
-        <main className={isChatPage || isGroupsPage ? "flex-1 lg:ml-[280px] min-w-0" : shouldShowRightPanel ? "flex-1 lg:ml-[280px] xl:mr-[320px] min-w-0" : "flex-1 lg:ml-[280px] min-w-0"}>
+        {/* Main Content — padding-left is synced with sidebar via inline style on inner div */}
+        <main
+          className={cn(
+            'w-full min-w-0',
+            'pb-16 lg:pb-0',
+            shouldShowRightPanel && !isChatPage && !isGroupsPage ? 'xl:pr-[320px]' : ''
+          )}
+        >
+          {/* Inner wrapper: smoothly shifts right when sidebar expands */}
           <div
-            className={
-              isChatPage
-                ? "h-[calc(100vh-56px)]"
-                : isSearchPage
-                  ? "w-full px-0 sm:px-4 xl:px-8 py-2 sm:py-4"
-                : isProfilePage
-                  ? "max-w-[1500px] mx-auto px-0 sm:px-4 xl:px-5 py-2 sm:py-4"
-                  : isUnifiedWidePage
-                    ? "max-w-[1280px] mx-auto px-0 sm:px-5 xl:px-7 py-2 sm:py-4"
-                    : "max-w-3xl mx-auto px-0 sm:px-4 py-2 sm:py-4"
-            }
+            style={{
+              paddingLeft: isLgUp ? `${sidebarExpanded ? 240 : 68}px` : 0,
+              transition: 'padding-left 300ms ease-in-out'
+            }}
           >
-            <Outlet />
+            <div
+              className={
+                isChatPage
+                  ? 'h-[calc(100vh-56px)]'
+                  : isSearchPage
+                    ? 'w-full px-0 sm:px-4 xl:px-8 py-2 sm:py-4'
+                  : isProfilePage
+                    ? 'max-w-[1500px] mx-auto px-0 sm:px-4 xl:px-5 py-2 sm:py-4'
+                    : isUnifiedWidePage
+                      ? 'max-w-[1280px] mx-auto px-0 sm:px-5 xl:px-7 py-2 sm:py-4'
+                      : 'max-w-3xl mx-auto px-0 sm:px-4 py-2 sm:py-4'
+              }
+            >
+              <Outlet />
+            </div>
           </div>
         </main>
 
         {/* Right Panel */}
         {shouldShowRightPanel && isXlUp && (
-          <aside className="flex flex-col fixed right-0 top-[var(--topbar-height)] bottom-0 w-[320px] overflow-y-auto p-3 border-l border-border-light bg-white/85 backdrop-blur-md">
+          <aside className="flex flex-col fixed right-0 top-[var(--topbar-height)] bottom-0 w-[320px] overflow-y-auto p-3 border-l border-border-light bg-white/85 backdrop-blur-xl">
             <RightPanel />
           </aside>
         )}
+      </div>
+
+      {/* Floating chat button — Instagram style, bottom-right */}
+      <FloatingChat />
+      <div
+        className={`fixed inset-0 z-50 transition-opacity duration-300 ${
+          settingsOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+        aria-hidden={!settingsOpen}
+      >
+        <div
+          className="absolute inset-0 bg-black/30"
+          onClick={() => setSettingsOpen(false)}
+        />
+        <aside
+          className={`absolute right-0 top-0 h-full bg-white border-l border-border-light shadow-2xl transition-transform duration-300 ease-out overflow-y-auto ${
+            settingsOpen ? 'translate-x-0' : 'translate-x-full'
+          } w-full max-w-full sm:w-[78vw] sm:max-w-[78vw] lg:w-[25vw] lg:max-w-[25vw]`}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Cài đặt"
+        >
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border-light bg-gradient-to-b from-primary-50 to-white px-4 py-3">
+            <h2 className="text-lg font-semibold text-text-primary">Cài đặt</h2>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(false)}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-text-secondary hover:bg-hover-bg"
+              aria-label="Đóng cài đặt"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+          <div className="p-4">
+            <SettingsPanel inModal />
+          </div>
+        </aside>
       </div>
       <Modal
         open={!!incomingCallPopup}
@@ -224,11 +332,3 @@ export default function UserLayout() {
     </div>
   )
 }
-
-
-
-
-
-
-
-

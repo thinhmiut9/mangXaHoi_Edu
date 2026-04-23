@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
+import Picker from '@emoji-mart/react'
+import data from '@emoji-mart/data'
 import { usersApi } from '@/api/users'
 import { Avatar } from '@/components/ui/Avatar'
 
@@ -20,10 +23,94 @@ interface MentionTextareaProps {
   autoFocus?: boolean
 }
 
-/**
- * Textarea thông minh hỗ trợ gắn thẻ người dùng bằng @
- * Mention được lưu dưới dạng @[DisplayName](userId) trong value
- */
+/* ─────────────────────────────────────────────
+   Portal-based Emoji Picker
+   Renders at document.body so it's NEVER clipped
+   by overflow:hidden / overflow:auto ancestors.
+   Automatically positions itself to avoid going
+   off-screen (like Facebook).
+───────────────────────────────────────────── */
+interface EmojiPortalProps {
+  anchorRef: React.RefObject<HTMLElement>
+  onSelect: (emoji: { native: string }) => void
+  onClose: () => void
+}
+
+function EmojiPortal({ anchorRef, onSelect, onClose }: EmojiPortalProps) {
+  const [style, setStyle] = useState<React.CSSProperties>({ visibility: 'hidden', position: 'fixed', zIndex: 9999 })
+  const pickerRef = useRef<HTMLDivElement>(null)
+
+  // Calculate smart position based on anchor button's screen coordinates
+  useEffect(() => {
+    const update = () => {
+      const anchor = anchorRef.current
+      if (!anchor) return
+      const rect = anchor.getBoundingClientRect()
+      const pickerW = 352
+      const pickerH = 435
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+
+      // Horizontal: right-align with anchor, clamp to viewport
+      let left = rect.right - pickerW
+      if (left < 8) left = 8
+      if (left + pickerW > vw - 8) left = vw - pickerW - 8
+
+      // Vertical: prefer above, fallback below
+      let top: number
+      if (rect.top >= pickerH + 12) {
+        top = rect.top - pickerH - 6
+      } else {
+        top = rect.bottom + 6
+      }
+      if (top + pickerH > vh - 8) top = vh - pickerH - 8
+      if (top < 8) top = 8
+
+      setStyle({ position: 'fixed', top, left, zIndex: 9999, visibility: 'visible' })
+    }
+
+    update()
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
+    }
+  }, [anchorRef])
+
+  // Close when clicking outside picker and anchor
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const anchor = anchorRef.current
+      if (
+        pickerRef.current && !pickerRef.current.contains(e.target as Node) &&
+        (!anchor || !anchor.contains(e.target as Node))
+      ) {
+        onClose()
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [anchorRef, onClose])
+
+  return createPortal(
+    <div ref={pickerRef} style={style} className="drop-shadow-2xl rounded-2xl overflow-hidden">
+      <Picker
+        data={data}
+        locale="vi"
+        onEmojiSelect={onSelect}
+        theme="light"
+        previewPosition="none"
+        skinTonePosition="none"
+      />
+    </div>,
+    document.body
+  )
+}
+
+/* ─────────────────────────────────────────────
+   MentionTextarea – multi-line, for creating posts
+───────────────────────────────────────────── */
 export function MentionTextarea({
   value,
   onChange,
@@ -37,6 +124,7 @@ export function MentionTextarea({
 }: MentionTextareaProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const emojiBtnRef = useRef<HTMLButtonElement>(null)
 
   const [suggestions, setSuggestions] = useState<MentionUser[]>([])
   const [showDropdown, setShowDropdown] = useState(false)
@@ -45,39 +133,26 @@ export function MentionTextarea({
   const [query, setQuery] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
 
-  // Lấy gợi ý user khi query thay đổi
   useEffect(() => {
-    if (!query && query.length === 0) {
-      setSuggestions([])
-      return
-    }
+    if (!query && query.length === 0) { setSuggestions([]); return }
     if (debounceRef.current) clearTimeout(debounceRef.current)
     setIsLoading(true)
     debounceRef.current = setTimeout(async () => {
-      try {
-        const results = await usersApi.mentionSearch(query)
-        setSuggestions(results)
-      } catch {
-        setSuggestions([])
-      } finally {
-        setIsLoading(false)
-      }
+      try { const results = await usersApi.mentionSearch(query); setSuggestions(results) }
+      catch { setSuggestions([]) }
+      finally { setIsLoading(false) }
     }, 300)
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-    }
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [query])
 
-  // Đóng dropdown khi click ngoài
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (
         textareaRef.current && !textareaRef.current.contains(e.target as Node) &&
         dropdownRef.current && !dropdownRef.current.contains(e.target as Node)
-      ) {
-        setShowDropdown(false)
-      }
+      ) setShowDropdown(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -87,14 +162,10 @@ export function MentionTextarea({
     const val = e.target.value
     const cursor = e.target.selectionStart ?? val.length
     onChange(val)
-
-    // Tìm @ gần con trỏ nhất
     const textBefore = val.slice(0, cursor)
     const atMatch = textBefore.match(/@([\w.]*)$/)
-
     if (atMatch) {
-      const start = cursor - atMatch[0].length
-      setMentionStart(start)
+      setMentionStart(cursor - atMatch[0].length)
       setQuery(atMatch[1])
       setShowDropdown(true)
       setSelectedIndex(0)
@@ -105,60 +176,47 @@ export function MentionTextarea({
     }
   }
 
-  const insertMention = useCallback(
-    (user: MentionUser) => {
-      if (mentionStart === null) return
-      const textarea = textareaRef.current
-      const cursor = textarea?.selectionStart ?? value.length
-      // Xóa phần @query trước cursor
-      const before = value.slice(0, mentionStart)
-      const after = value.slice(cursor)
-      const token = `@[${user.displayName}](${user.userId})`
-      const newValue = before + token + ' ' + after
-      onChange(newValue)
-      setShowDropdown(false)
-      setMentionStart(null)
-      setQuery('')
-      // Di chuyển cursor sau token
-      setTimeout(() => {
-        if (textarea) {
-          const pos = before.length + token.length + 1
-          textarea.focus()
-          textarea.setSelectionRange(pos, pos)
-        }
-      }, 0)
-    },
-    [mentionStart, value, onChange]
-  )
+  const insertMention = useCallback((user: MentionUser) => {
+    if (mentionStart === null) return
+    const textarea = textareaRef.current
+    const cursor = textarea?.selectionStart ?? value.length
+    const before = value.slice(0, mentionStart)
+    const after = value.slice(cursor)
+    const token = `@[${user.displayName}](${user.userId})`
+    const newValue = before + token + ' ' + after
+    onChange(newValue)
+    setShowDropdown(false)
+    setMentionStart(null)
+    setQuery('')
+    setTimeout(() => {
+      if (textarea) { const pos = before.length + token.length + 1; textarea.focus(); textarea.setSelectionRange(pos, pos) }
+    }, 0)
+  }, [mentionStart, value, onChange])
+
+  const insertEmoji = useCallback((emoji: { native: string }) => {
+    const textarea = textareaRef.current
+    const cursor = textarea?.selectionStart ?? value.length
+    const newValue = value.slice(0, cursor) + emoji.native + value.slice(cursor)
+    onChange(newValue)
+    setShowEmojiPicker(false)
+    setTimeout(() => {
+      if (textarea) { const pos = cursor + emoji.native.length; textarea.focus(); textarea.setSelectionRange(pos, pos) }
+    }, 0)
+  }, [value, onChange])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showDropdown && suggestions.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        setSelectedIndex(i => (i + 1) % suggestions.length)
-        return
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        setSelectedIndex(i => (i - 1 + suggestions.length) % suggestions.length)
-        return
-      }
-      if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault()
-        insertMention(suggestions[selectedIndex])
-        return
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        setShowDropdown(false)
-        return
-      }
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIndex(i => (i + 1) % suggestions.length); return }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIndex(i => (i - 1 + suggestions.length) % suggestions.length); return }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); insertMention(suggestions[selectedIndex]); return }
+      if (e.key === 'Escape') { e.preventDefault(); setShowDropdown(false); return }
     }
     onKeyDown?.(e)
   }
 
   return (
     <div className="relative w-full">
+      {/* Textarea */}
       <textarea
         ref={textareaRef}
         value={value}
@@ -172,6 +230,33 @@ export function MentionTextarea({
         autoFocus={autoFocus}
       />
 
+      {/* Emoji button – bottom-right corner of the textarea area */}
+      <button
+        ref={emojiBtnRef}
+        type="button"
+        onClick={() => setShowEmojiPicker(v => !v)}
+        className="absolute bottom-2 right-2 w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:text-yellow-500 hover:bg-slate-100 transition-colors text-lg"
+        aria-label="Chọn emoji"
+        title="Chọn emoji"
+      >
+        <svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+          <circle cx='12' cy='12' r='10' />
+          <path d='M8 14s1.5 2 4 2 4-2 4-2' />
+          <line x1='9' y1='9' x2='9.01' y2='9' />
+          <line x1='15' y1='9' x2='15.01' y2='9' />
+        </svg>
+      </button>
+
+      {/* Portal picker – never clipped by modal overflow */}
+      {showEmojiPicker && (
+        <EmojiPortal
+          anchorRef={emojiBtnRef as React.RefObject<HTMLElement>}
+          onSelect={insertEmoji}
+          onClose={() => setShowEmojiPicker(false)}
+        />
+      )}
+
+      {/* Mention dropdown */}
       {showDropdown && (
         <div
           ref={dropdownRef}
@@ -191,12 +276,8 @@ export function MentionTextarea({
                 key={user.userId}
                 role="option"
                 aria-selected={idx === selectedIndex}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors cursor-pointer
-                  ${idx === selectedIndex ? 'bg-primary-50' : 'hover:bg-app-bg'}`}
-                onMouseDown={(e) => {
-                  e.preventDefault()
-                  insertMention(user)
-                }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors cursor-pointer ${idx === selectedIndex ? 'bg-primary-50' : 'hover:bg-app-bg'}`}
+                onMouseDown={(e) => { e.preventDefault(); insertMention(user) }}
                 onMouseEnter={() => setSelectedIndex(idx)}
               >
                 <Avatar src={user.avatarUrl} name={user.displayName} size="xs" />
@@ -212,11 +293,12 @@ export function MentionTextarea({
   )
 }
 
-/**
- * Input 1 dòng (không phải textarea) hỗ trợ mention, dùng cho comment reply
- */
+/* ─────────────────────────────────────────────
+   MentionInput – single-line, for comments / replies
+───────────────────────────────────────────── */
 interface MentionInputProps extends Omit<MentionTextareaProps, 'rows'> {
   onSubmit?: () => void
+  showEmojiBtn?: boolean
 }
 
 export function MentionInput({
@@ -228,9 +310,11 @@ export function MentionInput({
   onKeyDown,
   'aria-label': ariaLabel,
   onSubmit,
+  showEmojiBtn = true,
 }: MentionInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const emojiBtnRef = useRef<HTMLButtonElement>(null)
 
   const [suggestions, setSuggestions] = useState<MentionUser[]>([])
   const [showDropdown, setShowDropdown] = useState(false)
@@ -239,16 +323,15 @@ export function MentionInput({
   const [query, setQuery] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
 
   useEffect(() => {
     if (!query && query.length === 0) { setSuggestions([]); return }
     if (debounceRef.current) clearTimeout(debounceRef.current)
     setIsLoading(true)
     debounceRef.current = setTimeout(async () => {
-      try {
-        const results = await usersApi.mentionSearch(query)
-        setSuggestions(results)
-      } catch { setSuggestions([]) }
+      try { const results = await usersApi.mentionSearch(query); setSuggestions(results) }
+      catch { setSuggestions([]) }
       finally { setIsLoading(false) }
     }, 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
@@ -303,17 +386,24 @@ export function MentionInput({
     }, 0)
   }, [mentionStart, value, onChange])
 
+  const insertEmoji = useCallback((emoji: { native: string }) => {
+    const input = inputRef.current
+    const cursor = input?.selectionStart ?? value.length
+    const newValue = value.slice(0, cursor) + emoji.native + value.slice(cursor)
+    onChange(newValue)
+    setShowEmojiPicker(false)
+    setTimeout(() => {
+      if (input) { const pos = cursor + emoji.native.length; input.focus(); input.setSelectionRange(pos, pos) }
+    }, 0)
+  }, [value, onChange])
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (showDropdown && suggestions.length > 0) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIndex(i => (i + 1) % suggestions.length); return }
       if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIndex(i => (i - 1 + suggestions.length) % suggestions.length); return }
       if (e.key === 'Tab') { e.preventDefault(); insertMention(suggestions[selectedIndex]); return }
       if (e.key === 'Escape') { e.preventDefault(); setShowDropdown(false); return }
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        insertMention(suggestions[selectedIndex])
-        return
-      }
+      if (e.key === 'Enter') { e.preventDefault(); insertMention(suggestions[selectedIndex]); return }
     }
     if (e.key === 'Enter' && !e.shiftKey && value.trim() && !showDropdown) {
       e.preventDefault()
@@ -323,7 +413,9 @@ export function MentionInput({
   }
 
   return (
-    <div className="relative flex-1 min-w-0">
+    // Flex row: [input flexes to fill] [emoji button fixed width]
+    <div className="relative flex-1 min-w-0 flex items-center gap-1">
+      {/* Input – no visible border / outline */}
       <input
         ref={inputRef}
         type="text"
@@ -331,11 +423,40 @@ export function MentionInput({
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        className={className}
+        className={`flex-1 min-w-0 border-0 outline-none ring-0 focus:outline-none focus:ring-0 bg-transparent ${className ?? ''}`}
         disabled={disabled}
         aria-label={ariaLabel}
       />
 
+      {/* Emoji toggle button – sits as flex sibling inside the rounded pill */}
+      {showEmojiBtn && (
+        <button
+          ref={emojiBtnRef}
+          type="button"
+          onClick={() => setShowEmojiPicker(v => !v)}
+          className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:text-yellow-500 hover:bg-black/5 transition-colors text-base"
+          aria-label="Chọn emoji"
+          title="Chọn emoji"
+        >
+          <svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+          <circle cx='12' cy='12' r='10' />
+          <path d='M8 14s1.5 2 4 2 4-2 4-2' />
+          <line x1='9' y1='9' x2='9.01' y2='9' />
+          <line x1='15' y1='9' x2='15.01' y2='9' />
+        </svg>
+        </button>
+      )}
+
+      {/* Portal picker – renders at document.body, never clipped */}
+      {showEmojiPicker && (
+        <EmojiPortal
+          anchorRef={emojiBtnRef as React.RefObject<HTMLElement>}
+          onSelect={insertEmoji}
+          onClose={() => setShowEmojiPicker(false)}
+        />
+      )}
+
+      {/* Mention dropdown */}
       {showDropdown && (
         <div
           ref={dropdownRef}
@@ -352,8 +473,7 @@ export function MentionInput({
                 key={user.userId}
                 role="option"
                 aria-selected={idx === selectedIndex}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors cursor-pointer
-                  ${idx === selectedIndex ? 'bg-primary-50' : 'hover:bg-app-bg'}`}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors cursor-pointer ${idx === selectedIndex ? 'bg-primary-50' : 'hover:bg-app-bg'}`}
                 onMouseDown={(e) => { e.preventDefault(); insertMention(user) }}
                 onMouseEnter={() => setSelectedIndex(idx)}
               >

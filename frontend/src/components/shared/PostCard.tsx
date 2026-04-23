@@ -15,6 +15,7 @@ import { extractError } from '@/api/client'
 import { cn } from '@/utils/cn'
 import { MentionInput } from '@/components/ui/MentionTextarea'
 import { MentionText } from '@/components/ui/MentionText'
+import { ShareModal } from '@/components/shared/ShareModal'
 
 interface PostCardProps {
   post: Post
@@ -68,6 +69,16 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
   const [reportOpen, setReportOpen] = useState(false)
   const [reportReason, setReportReason] = useState('SPAM')
   const [reportDesc, setReportDesc] = useState('')
+  const [shareOpen, setShareOpen] = useState(false)
+  const [commentMenuId, setCommentMenuId] = useState<string | null>(null)
+  const [editingComment, setEditingComment] = useState<{ id: string; content: string } | null>(null)
+  const [commentReportOpen, setCommentReportOpen] = useState(false)
+  const [reportCommentTarget, setReportCommentTarget] = useState<string | null>(null)
+  const [commentReportReason, setCommentReportReason] = useState('SPAM')
+  const [commentReportDesc, setCommentReportDesc] = useState('')
+
+  // Close comment menu on outside click
+  const handleOutsideClick = () => setCommentMenuId(null)
 
   const reportMutation = useMutation({
     mutationFn: () => reportsApi.create({ targetId: post.id, targetType: 'POST', reason: reportReason, description: reportDesc }),
@@ -75,6 +86,17 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
       toast.success('Đã gửi báo cáo thành công')
       setReportOpen(false)
       setReportDesc('')
+    },
+    onError: (err) => toast.error(extractError(err)),
+  })
+
+  const reportCommentMutation = useMutation({
+    mutationFn: () => reportsApi.create({ targetId: reportCommentTarget!, targetType: 'COMMENT', reason: commentReportReason, description: commentReportDesc }),
+    onSuccess: () => {
+      toast.success('Đã gửi báo cáo bình luận')
+      setCommentReportOpen(false)
+      setCommentReportDesc('')
+      setReportCommentTarget(null)
     },
     onError: (err) => toast.error(extractError(err)),
   })
@@ -172,6 +194,16 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
     onError: (err) => toast.error(extractError(err)),
   })
 
+  const updateCommentMutation = useMutation({
+    mutationFn: ({ id, content }: { id: string; content: string }) => postsApi.updateComment(id, content),
+    onSuccess: () => {
+      toast.success('Đã cập nhật bình luận')
+      setEditingComment(null)
+      queryClient.invalidateQueries({ queryKey: ['comments', post.id] })
+    },
+    onError: (err) => toast.error(extractError(err)),
+  })
+
   const likeCommentMutation = useMutation({
     mutationFn: (commentId: string) => postsApi.toggleCommentLike(commentId),
     onSuccess: () => {
@@ -234,36 +266,115 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
     return acc
   }, {})
   const rootComments = commentsList.filter(comment => !comment.parentId)
-  const handleSharePost = () => shareMutation.mutate()
+  const handleSharePost = () => setShareOpen(true)
 
   const renderComment = (comment: PostComment, depth = 0): JSX.Element => {
     const isOwnComment = user?.id === comment.authorId
     const childReplies = repliesByParent[comment.id] ?? []
     const isReplyingThis = replyingTo === comment.id
+    const isMenuOpen = commentMenuId === comment.id
+    const isEditing = editingComment?.id === comment.id
 
     return (
       <div key={comment.id} className={cn('space-y-2', depth > 0 && 'ml-9')}>
         <div className="flex items-start gap-2">
           <Avatar src={comment.author?.avatar} name={comment.author?.displayName ?? ''} size="sm" />
           <div className="flex-1">
-            <div className="bg-app-bg rounded-2xl px-3 py-2 cursor-pointer" onClick={openDetail}>
+            <div className="bg-app-bg rounded-2xl px-3 py-2 cursor-pointer" onClick={!isEditing ? openDetail : undefined}>
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-semibold text-text-primary mb-0.5">{comment.author?.displayName}</p>
-                {isOwnComment && (
+                {/* 3-dot menu: shows for own and others' comments */}
+                <div className="relative">
                   <button
-                    className="text-xs text-error-500 hover:underline"
+                    className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition-colors"
                     onClick={(e) => {
                       e.stopPropagation()
-                      deleteCommentMutation.mutate(comment.id)
+                      setCommentMenuId(isMenuOpen ? null : comment.id)
                     }}
+                    title="Tùy chọn"
                   >
-                    Xóa
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" />
+                    </svg>
                   </button>
-                )}
+                  {isMenuOpen && (
+                    <div
+                      className="absolute right-0 top-7 z-50 bg-white rounded-xl shadow-lg border border-slate-100 py-1 min-w-[140px]"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      {isOwnComment ? (
+                        <>
+                          <button
+                            className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                            onClick={() => {
+                              setEditingComment({ id: comment.id, content: comment.content })
+                              setCommentMenuId(null)
+                            }}
+                          >
+                            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                            Chỉnh sửa
+                          </button>
+                          <button
+                            className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 flex items-center gap-2"
+                            onClick={() => {
+                              setCommentMenuId(null)
+                              deleteCommentMutation.mutate(comment.id)
+                            }}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            Xóa
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          className="w-full text-left px-4 py-2 text-sm text-orange-600 hover:bg-orange-50 flex items-center gap-2"
+                          onClick={() => {
+                            setCommentMenuId(null)
+                            setReportCommentTarget(comment.id)
+                            setCommentReportReason('SPAM')
+                            setCommentReportDesc('')
+                            setCommentReportOpen(true)
+                          }}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 3h18l-2 9H5L3 3zM5 12l-2 9h18l-2-9" /><circle cx="12" cy="19" r="1" /></svg>
+                          Báo cáo
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
               </div>
-              <p className="text-sm text-text-primary whitespace-pre-wrap">
-                <MentionText content={comment.content} />
-              </p>
+              {isEditing ? (
+                <div className="mt-1" onClick={e => e.stopPropagation()}>
+                  <textarea
+                    className="w-full text-sm border border-slate-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-400 resize-none"
+                    rows={2}
+                    value={editingComment!.content}
+                    onChange={e => setEditingComment({ id: comment.id, content: e.target.value })}
+                    autoFocus
+                  />
+                  <div className="flex gap-2 mt-1">
+                    <button
+                      className="text-xs px-3 py-1 rounded-full bg-primary-600 text-white font-semibold hover:bg-primary-700 disabled:opacity-50"
+                      disabled={updateCommentMutation.isPending || !editingComment!.content.trim()}
+                      onClick={() => updateCommentMutation.mutate({ id: comment.id, content: editingComment!.content.trim() })}
+                    >
+                      Lưu
+                    </button>
+                    <button
+                      className="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      onClick={() => setEditingComment(null)}
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-text-primary whitespace-pre-wrap">
+                  <MentionText content={comment.content} />
+                </p>
+              )}
             </div>
 
             <div className="mt-1 ml-2 flex items-center gap-3 text-xs text-text-muted">
@@ -275,7 +386,11 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
                 }}
                 disabled={likeCommentMutation.isPending}
               >
-                {comment.isLiked ? '❤️' : '🤍'} Tim
+                <span className={comment.isLiked ? 'text-rose-500' : 'text-slate-400'}>
+                  <svg className='w-3.5 h-3.5 inline-block' viewBox='0 0 24 24' fill={comment.isLiked ? 'currentColor' : 'none'} stroke='currentColor' strokeWidth='2'>
+                    <path strokeLinecap='round' strokeLinejoin='round' d='M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 1 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z' />
+                  </svg>
+                </span> Tim
               </button>
               <button
                 className="hover:underline"
@@ -296,7 +411,7 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
                   value={replyText}
                   onChange={setReplyText}
                   placeholder="Viết phản hồi..."
-                  className="flex-1 bg-transparent text-sm focus:outline-none"
+                  className="bg-transparent text-sm focus:outline-none"
                   onSubmit={() => {
                     if (replyText.trim()) commentMutation.mutate({ content: replyText.trim(), parentId: comment.id })
                   }}
@@ -417,6 +532,7 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
   }
 
   return (
+    <>
     <article className="bg-white rounded-lg border border-slate-200 overflow-hidden">
       <div className="px-4 py-3">
         <div className="flex items-center justify-between gap-3">
@@ -557,7 +673,11 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
 
         {post.isPinned && (
           <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-            <span aria-hidden="true">📌</span>
+            <span aria-hidden='true'>
+              <svg className='w-3.5 h-3.5 inline-block text-primary-500' viewBox='0 0 24 24' fill='currentColor' stroke='none'>
+                <path d='M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z'/>
+              </svg>
+            </span>
             <span>Bài viết đã ghim</span>
           </div>
         )}
@@ -620,12 +740,69 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
         )}
       </div>
 
-      {renderPostMedia()}
-      {renderPostVideos()}
+      {/* Only show media if this is NOT a shared post — shared posts show original's media in the card below */}
+      {!post.originalPost && renderPostMedia()}
+      {!post.originalPost && renderPostVideos()}
+
+      {/* Embedded original post for shared posts */}
+      {post.originalPost && (
+        <div className="mx-4 mb-3 mt-2 rounded-xl border border-slate-200 overflow-hidden bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors"
+          onClick={openDetail}
+        >
+          {/* Original post header — click goes to author profile, not post detail */}
+          <Link
+            to={`/profile/${post.originalPost.author?.id ?? post.originalPost.authorId}`}
+            onClick={e => e.stopPropagation()}
+            className="flex items-center gap-2 px-3 pt-3 pb-2 hover:bg-slate-200/50 transition-colors"
+          >
+            <Avatar
+              src={post.originalPost.author?.avatar}
+              name={post.originalPost.author?.displayName ?? ''}
+              size="xs"
+            />
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-slate-800 truncate leading-tight hover:underline">
+                {post.originalPost.author?.displayName ?? 'Người dùng'}
+              </p>
+              <p className="text-[11px] text-slate-500 leading-tight">
+                {timeAgo(post.originalPost.createdAt)}
+              </p>
+            </div>
+          </Link>
+          {/* Original post content */}
+          {post.originalPost.content && (
+            <p className="px-3 pb-2 text-sm text-slate-700 line-clamp-3 whitespace-pre-wrap">
+              {post.originalPost.content}
+            </p>
+          )}
+          {/* Original post image preview */}
+          {(post.originalPost.imageUrls?.[0] || post.originalPost.images?.[0]) && (
+            <img
+              src={post.originalPost.imageUrls?.[0] || post.originalPost.images?.[0]}
+              alt="Ảnh bài gốc"
+              className="w-full max-h-64 object-cover"
+              loading="lazy"
+            />
+          )}
+          {/* Original post video preview */}
+          {!post.originalPost.imageUrls?.length && post.originalPost.videoUrls?.[0] && (
+            <video
+              src={post.originalPost.videoUrls[0]}
+              className="w-full max-h-64 object-cover"
+              preload="metadata"
+              muted
+            />
+          )}
+        </div>
+      )}
 
       <div className="border-t border-border-light px-3 py-2 bg-white flex items-center justify-between text-[13px] text-slate-500">
         <button type="button" onClick={openReactions} className="flex items-center gap-1.5 hover:underline">
-          <span className="text-red-500 text-sm">❤️</span>
+          <span className='text-rose-500'>
+              <svg className='w-4 h-4' viewBox='0 0 24 24' fill='currentColor'>
+                <path d='M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z'/>
+              </svg>
+            </span>
           <span>{post.likesCount}</span>
         </button>
         <button type="button" onClick={openDetail} className="hover:underline">
@@ -739,7 +916,7 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
                 value={newComment}
                 onChange={setNewComment}
                 placeholder="Viết bình luận..."
-                className="flex-1 bg-transparent text-sm focus:outline-none"
+                className="bg-transparent text-sm"
                 aria-label="Viết bình luận"
                 onSubmit={() => { if (newComment.trim()) commentMutation.mutate({ content: newComment.trim() }) }}
               />
@@ -857,6 +1034,50 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
         </div>
       </Modal>
     </article>
+
+    {shareOpen && (
+      <ShareModal post={post} onClose={() => setShareOpen(false)} />
+    )}
+
+    {/* Report Comment Modal */}
+    <Modal
+      open={commentReportOpen}
+      onClose={() => setCommentReportOpen(false)}
+      title="Báo cáo bình luận"
+      footer={(
+        <>
+          <Button variant="secondary" onClick={() => setCommentReportOpen(false)}>Hủy</Button>
+          <Button
+            onClick={() => reportCommentMutation.mutate()}
+            loading={reportCommentMutation.isPending}
+            disabled={!commentReportReason}
+          >
+            Gửi báo cáo
+          </Button>
+        </>
+      )}
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-text-secondary">Vui lòng chọn lý do báo cáo bình luận này. Quản trị viên sẽ xem xét và xử lý.</p>
+        <select
+          value={commentReportReason}
+          onChange={e => setCommentReportReason(e.target.value)}
+          className="w-full h-10 rounded-md border border-border-main bg-white px-3 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+        >
+          <option value="SPAM">Spam, vi phạm tiêu chuẩn</option>
+          <option value="INAPPROPRIATE">Nội dung phản cảm, không phù hợp</option>
+          <option value="HARASSMENT">Quấy rối, công kích cá nhân</option>
+          <option value="FAKE_NEWS">Tin giả, sai sự thật</option>
+          <option value="OTHER">Lý do khác...</option>
+        </select>
+        <TextArea
+          value={commentReportDesc}
+          onChange={e => setCommentReportDesc(e.target.value)}
+          placeholder="Mô tả thêm (không bắt buộc)"
+          rows={3}
+        />
+      </div>
+    </Modal>
+    </>
   )
 }
-

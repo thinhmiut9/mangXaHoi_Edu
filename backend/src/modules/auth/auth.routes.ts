@@ -8,6 +8,7 @@ import {
   loginSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  changePasswordSchema,
 } from './auth.schema'
 
 const router = Router()
@@ -21,5 +22,6 @@ router.post('/reset-password', authLimiter, validate(resetPasswordSchema), authC
 // Protected routes
 router.get('/me', requireAuth, authController.me)
 router.post('/logout', requireAuth, authController.logout)
+router.post('/change-password', authLimiter, requireAuth, validate(changePasswordSchema), authController.changePassword)
 
 export default router

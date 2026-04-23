@@ -6,6 +6,7 @@ const router = Router()
 router.use(requireAuth)
 
 router.get('/', friendsController.getFriends)
+router.get('/requests/count', friendsController.getRequestCount)
 router.get('/requests', friendsController.getRequests)
 router.get('/requests/sent', friendsController.getSentRequests)
 router.get('/suggestions', friendsController.getSuggestions)

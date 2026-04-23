@@ -27,6 +27,15 @@ export const authRepository = {
     return result.u.properties
   },
 
+  async findByIdForAuth(userId: string): Promise<User | null> {
+    const result = await runQueryOne<{ u: { properties: User } }>(
+      `MATCH (u:User {userId: $userId}) RETURN u`,
+      { userId }
+    )
+    if (!result) return null
+    return result.u.properties
+  },
+
   async create(data: CreateUserData): Promise<UserPublic> {
     const now = new Date().toISOString()
     const result = await runQueryOne<{ u: { properties: UserPublic } }>(

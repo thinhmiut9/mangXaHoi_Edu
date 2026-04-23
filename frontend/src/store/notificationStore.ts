@@ -5,9 +5,11 @@ interface NotificationState {
   unreadCount: number
   unreadNotificationCount: number
   unreadMessageCount: number
+  friendRequestCount: number
   notifications: Notification[]
   setUnreadCount: (count: number) => void
   setUnreadSummary: (summary: { notificationCount: number; messageCount: number }) => void
+  setFriendRequestCount: (count: number) => void
   addNotification: (n: Notification) => void
   markRead: (id: string) => void
   markAllRead: () => void
@@ -18,6 +20,7 @@ export const useNotificationStore = create<NotificationState>((set) => ({
   unreadCount: 0,
   unreadNotificationCount: 0,
   unreadMessageCount: 0,
+  friendRequestCount: 0,
   notifications: [],
   setUnreadCount: (count) => set({ unreadCount: count, unreadNotificationCount: count }),
   setUnreadSummary: (summary) => set({
@@ -25,6 +28,7 @@ export const useNotificationStore = create<NotificationState>((set) => ({
     unreadMessageCount: summary.messageCount,
     unreadCount: summary.notificationCount,
   }),
+  setFriendRequestCount: (count) => set({ friendRequestCount: count }),
   addNotification: (n) => set(state => ({
     notifications: [n, ...state.notifications],
     unreadNotificationCount: n.type === 'MESSAGE'
@@ -36,6 +40,9 @@ export const useNotificationStore = create<NotificationState>((set) => ({
     unreadCount: n.type === 'MESSAGE'
       ? state.unreadCount
       : state.unreadCount + 1,
+    friendRequestCount: n.type === 'FRIEND_REQUEST'
+      ? state.friendRequestCount + 1
+      : state.friendRequestCount,
   })),
   markRead: (id) => set(state => {
     const target = state.notifications.find(n => n.id === id)

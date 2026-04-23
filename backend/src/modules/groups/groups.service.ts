@@ -68,6 +68,23 @@ export const groupsService = {
     return groupsRepository.getMembers(groupId, (page - 1) * limit, limit)
   },
 
+  async removeMember(groupId: string, ownerId: string, memberId: string) {
+    const isOwner = await groupsRepository.isOwner(groupId, ownerId)
+    if (!isOwner) throw new AppError('Chỉ chủ nhóm mới có thể xóa thành viên', 403, 'FORBIDDEN')
+    if (ownerId === memberId) throw new AppError('Không thể tự xóa chính mình khỏi nhóm ở đây', 400, 'INVALID_OPERATION')
+
+    const targetGroup = await groupsRepository.findById(groupId, memberId)
+    if (!targetGroup) throw new AppError('Nhóm không tồn tại', 404, 'GROUP_NOT_FOUND')
+
+    const targetIsOwner = await groupsRepository.isOwner(groupId, memberId)
+    if (targetIsOwner) throw new AppError('Không thể xóa chủ nhóm khỏi nhóm', 400, 'INVALID_OPERATION')
+
+    const isMember = await groupsRepository.isMember(groupId, memberId)
+    if (!isMember) throw new AppError('Người dùng không phải thành viên nhóm', 404, 'MEMBER_NOT_FOUND')
+
+    await groupsRepository.removeMember(groupId, memberId)
+  },
+
   async getJoinRequests(groupId: string, ownerId: string, page = 1, limit = 20) {
     const isOwner = await groupsRepository.isOwner(groupId, ownerId)
     if (!isOwner) throw new AppError('Chỉ chủ nhóm mới có thể xem yêu cầu duyệt', 403, 'FORBIDDEN')

@@ -20,6 +20,7 @@ async function migrate(): Promise<void> {
     `CREATE CONSTRAINT notif_notifId     IF NOT EXISTS FOR (n:Notification) REQUIRE n.notificationId IS UNIQUE`,
     `CREATE CONSTRAINT report_reportId   IF NOT EXISTS FOR (r:Report)       REQUIRE r.reportId       IS UNIQUE`,
     `CREATE CONSTRAINT story_storyId     IF NOT EXISTS FOR (s:Story)        REQUIRE s.storyId        IS UNIQUE`,
+    `CREATE CONSTRAINT document_documentId IF NOT EXISTS FOR (d:Document)   REQUIRE d.documentId     IS UNIQUE`,
   ]
 
   const indexes = [
@@ -34,6 +35,12 @@ async function migrate(): Promise<void> {
     `CREATE INDEX story_expires  IF NOT EXISTS FOR (s:Story)        ON (s.expiresAt)`,
     `CREATE INDEX story_active   IF NOT EXISTS FOR (s:Story)        ON (s.isActive)`,
     `CREATE INDEX msg_convId     IF NOT EXISTS FOR (m:Message)      ON (m.conversationId)`,
+    `CREATE INDEX document_status IF NOT EXISTS FOR (d:Document)    ON (d.status)`,
+    `CREATE INDEX document_visibility IF NOT EXISTS FOR (d:Document) ON (d.visibility)`,
+    `CREATE INDEX document_created IF NOT EXISTS FOR (d:Document)   ON (d.createdAt)`,
+    `CREATE INDEX document_views IF NOT EXISTS FOR (d:Document)     ON (d.viewsCount)`,
+    `CREATE INDEX document_downloads IF NOT EXISTS FOR (d:Document) ON (d.downloadsCount)`,
+    `CREATE FULLTEXT INDEX document_search IF NOT EXISTS FOR (d:Document) ON EACH [d.title, d.description, d.subject, d.school, d.major, d.cohort]`,
   ]
 
   for (const cypher of [...constraints, ...indexes]) {

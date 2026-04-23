@@ -19,6 +19,7 @@ import reportRoutes from './modules/reports/reports.routes'
 import adminRoutes from './modules/admin/admin.routes'
 import uploadRoutes from './modules/uploads/uploads.routes'
 import storyRoutes from './modules/stories/stories.routes'
+import documentRoutes from './modules/documents/documents.routes'
 
 const app = express()
 
@@ -98,6 +99,7 @@ app.use('/api/reports', reportRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/uploads', uploadRoutes)
 app.use('/api/stories', storyRoutes)
+app.use('/api/documents', documentRoutes)
 
 // 404 handler
 app.use(notFoundHandler)

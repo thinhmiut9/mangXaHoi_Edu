@@ -1,13 +1,24 @@
 import { runQuery, runQueryOne } from '../../config/neo4j'
 import { User, UserPublic } from '../../types'
 
+function normalizeUserIdParam(userId: string): string {
+  return userId.trim().replace(/\s+/g, '-')
+}
+
 export const usersRepository = {
   async findById(userId: string): Promise<User | null> {
+    const normalizedId = normalizeUserIdParam(userId)
     const result = await runQueryOne<{ u: { properties: User } }>(
-      `MATCH (u:User {userId: $userId}) RETURN u`,
-      { userId }
+      `MATCH (u:User)
+       WHERE replace(trim(coalesce(u.userId, '')), ' ', '-') = $normalizedId
+       RETURN u LIMIT 1`,
+      { normalizedId }
     )
-    return result ? result.u.properties : null
+    if (!result) return null
+    const user = result.u.properties
+    // Always return normalized userId
+    if (user.userId) user.userId = user.userId.trim().replace(/\s+/g, '-')
+    return user
   },
 
   // Keep the method name for route compatibility; lookup by displayName.
@@ -16,7 +27,10 @@ export const usersRepository = {
       `MATCH (u:User {displayName: $displayName}) RETURN u`,
       { displayName }
     )
-    return result ? result.u.properties : null
+    if (!result) return null
+    const user = result.u.properties
+    if (user.userId) user.userId = normalizeUserIdParam(user.userId)
+    return user
   },
 
   async search(query: string, limit = 10, skip = 0, viewerId?: string): Promise<UserPublic[]> {
@@ -43,9 +57,16 @@ export const usersRepository = {
     return results.map(r => sanitizeUser(r.u.properties))
   },
 
-  async update(userId: string, data: Partial<Pick<User, 'displayName' | 'bio' | 'avatarUrl' | 'coverUrl' | 'location' | 'profileVisibility'>>): Promise<User | null> {
+  async update(userId: string, data: Partial<Pick<User, 'displayName' | 'bio' | 'avatarUrl' | 'coverUrl' | 'location' | 'profileVisibility'>> & { avatarUrl?: string | null; coverUrl?: string | null }): Promise<User | null> {
     const now = new Date().toISOString()
-    const setClause = Object.keys(data)
+    // Filter out undefined values but keep null (null = remove property in Neo4j)
+    const filteredData = Object.fromEntries(
+      Object.entries(data).filter(([, v]) => v !== undefined)
+    )
+    if (Object.keys(filteredData).length === 0) {
+      return this.findById(userId)
+    }
+    const setClause = Object.keys(filteredData)
       .map(key => `u.${key} = $${key}`)
       .join(', ')
 
@@ -53,7 +74,7 @@ export const usersRepository = {
       `MATCH (u:User {userId: $userId})
        SET ${setClause}, u.updatedAt = $now
        RETURN u`,
-      { userId, ...data, now }
+      { userId, ...filteredData, now }
     )
     return result ? result.u.properties : null
   },
@@ -82,16 +103,18 @@ export const usersRepository = {
   },
 
   async getStats(userId: string): Promise<{ postsCount: number; friendsCount: number; groupsCount: number }> {
+    const normalizedId = normalizeUserIdParam(userId)
     const result = await runQueryOne<{ postsCount: number; friendsCount: number; groupsCount: number }>(
-      `MATCH (u:User {userId: $userId})
-       OPTIONAL MATCH (u)-[:CREATED]->(p:Post)
-       OPTIONAL MATCH (u)-[fr]-(f:User)
-       WHERE type(fr) IN ['FRIENDS_WITH']
-       OPTIONAL MATCH (u)-[:MEMBER_OF]->(g:Group)
-       RETURN count(DISTINCT p) AS postsCount,
-               count(DISTINCT f) AS friendsCount,
-               count(DISTINCT g) AS groupsCount`,
-      { userId }
+      `MATCH (u:User)
+       WHERE replace(trim(coalesce(u.userId, '')), ' ', '-') = $normalizedId
+       RETURN COUNT { (u)-[:CREATED]->(:Post) } AS postsCount,
+              COUNT {
+                (u)-[fr]-(f:User)
+                WHERE type(fr) IN ['FRIENDS_WITH']
+                  AND coalesce(f.role, 'USER') <> 'ADMIN'
+              } AS friendsCount,
+              COUNT { (u)-[:MEMBER_OF]->(:Group) } AS groupsCount`,
+      { normalizedId }
     )
     return result ?? { postsCount: 0, friendsCount: 0, groupsCount: 0 }
   },
@@ -123,8 +146,11 @@ export const usersRepository = {
 
 function sanitizeUser(user: User): UserPublic {
   const { passwordHash: _passwordHash, updatedAt: _updatedAt, ...safe } = user
+  // Normalize userId: replace spaces with hyphens (handles corrupted UUID data)
+  if (safe.userId) safe.userId = safe.userId.trim().replace(/\s+/g, '-')
   return safe
 }
+
 
 
 

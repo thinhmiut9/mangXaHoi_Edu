@@ -1,6 +1,10 @@
 import { runQuery, runQueryOne } from '../../config/neo4j'
 import { Post, UserPublic } from '../../types'
 
+function normalizeUserIdParam(userId: string): string {
+  return userId.trim().replace(/\s+/g, '-')
+}
+
 export const postsRepository = {
   async create(data: {
     postId: string
@@ -206,6 +210,8 @@ export const postsRepository = {
   },
 
   async getUserPosts(userId: string, viewerId: string, skip = 0, limit = 10): Promise<Post[]> {
+    const normalizedUserId = normalizeUserIdParam(userId)
+    const normalizedViewerId = normalizeUserIdParam(viewerId)
     const results = await runQuery<{
       p: { properties: Post }
       author: { properties: Record<string, unknown> }
@@ -219,8 +225,10 @@ export const postsRepository = {
       commentsCount: number
       sharesCount: number
     }>(
-      `MATCH (u:User {userId: $userId})-[:CREATED]->(p:Post)
-       MATCH (viewer:User {userId: $viewerId})
+      `MATCH (u:User)-[:CREATED]->(p:Post)
+       MATCH (viewer:User)
+       WHERE replace(trim(coalesce(u.userId, '')), ' ', '-') = $userId
+         AND replace(trim(coalesce(viewer.userId, '')), ' ', '-') = $viewerId
        OPTIONAL MATCH (g:Group {groupId: p.groupId})
        WITH u, p, viewer, g, coalesce(p.visibility, p.privacy, 'PUBLIC') AS postVisibility
        WHERE NOT EXISTS((viewer)-[:BLOCKED]->(u))
@@ -248,7 +256,7 @@ export const postsRepository = {
                COUNT { ()-[:SHARED]->(p) } AS sharesCount
        ORDER BY coalesce(p.isPinned, false) DESC, coalesce(p.pinnedAt, '') DESC, p.createdAt DESC
        SKIP toInteger($skip) LIMIT toInteger($limit)`,
-      { userId, viewerId, skip, limit }
+      { userId: normalizedUserId, viewerId: normalizedViewerId, skip, limit }
     )
     return results.map(r => ({
       ...r.p.properties,
@@ -451,7 +459,9 @@ export const postsRepository = {
     return { pinned: true }
   },
 
-  async sharePost(postId: string, userId: string, sharedPostId: string): Promise<{ shared: boolean; sharesCount: number }> {
+  async sharePost(postId: string, userId: string, sharedPostId: string, caption?: string, visibility?: string): Promise<{ shared: boolean; sharesCount: number }> {
+    const shareCaption = caption ?? ''
+    const shareVisibility = visibility ?? 'PUBLIC'
     const result = await runQueryOne<{ shared: boolean; sharesCount: number }>(
       `MATCH (u:User {userId: $userId})
        MATCH (:User)-[:CREATED]->(p:Post {postId: $postId})
@@ -459,11 +469,13 @@ export const postsRepository = {
        FOREACH (_ IN CASE WHEN NOT alreadyShared THEN [1] ELSE [] END |
          CREATE (sp:Post {
            postId: $sharedPostId,
-           content: p.content,
-           mediaUrls: coalesce(p.mediaUrls, []),
-           visibility: coalesce(p.visibility, p.privacy, 'PUBLIC'),
+           content: $shareCaption,
+           mediaUrls: [],
+           visibility: $shareVisibility,
            groupId: null,
            sharedFromPostId: p.postId,
+           isPinned: false,
+           pinnedAt: null,
            createdAt: $now,
            updatedAt: $now
          })
@@ -472,7 +484,7 @@ export const postsRepository = {
          ON CREATE SET s.createdAt = $now
        )
        RETURN NOT alreadyShared AS shared, COUNT { ()-[:SHARED]->(p) } AS sharesCount`,
-      { postId, userId, sharedPostId, now: new Date().toISOString() }
+      { postId, userId, sharedPostId, shareCaption, shareVisibility, now: new Date().toISOString() }
     )
     return result ?? { shared: false, sharesCount: 0 }
   },
@@ -514,6 +526,30 @@ export const postsRepository = {
       `MATCH (p:Post) RETURN count(p) AS count`, {}
     )
     return result?.count ?? 0
+  },
+
+  async findManyByIds(postIds: string[]): Promise<Record<string, Post>> {
+    if (!postIds.length) return {}
+    const results = await runQuery<{
+      p: { properties: Post }
+      author: { properties: Record<string, unknown> }
+      documentUrls: string[]
+    }>(
+      `MATCH (p:Post)<-[:CREATED]-(u:User)
+       WHERE p.postId IN $postIds
+       RETURN p, u AS author, [(p)-[:HAS_DOCUMENT]->(d:Document) | d.fileUrl] AS documentUrls`,
+      { postIds }
+    )
+    const map: Record<string, Post> = {}
+    for (const r of results) {
+      const post = {
+        ...r.p.properties,
+        documentUrls: r.documentUrls,
+        author: r.author.properties as unknown as UserPublic,
+      }
+      map[post.postId] = post
+    }
+    return map
   },
 
   async getAuthorId(postId: string): Promise<string | null> {

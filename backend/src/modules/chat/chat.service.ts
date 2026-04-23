@@ -14,8 +14,7 @@ export const chatService = {
     if (userId === targetId) throw new AppError('Khong the tu nhan tin cho chinh minh', 400)
     const isBlocked = await friendsRepository.isBlockedBetween(userId, targetId)
     if (isBlocked) throw new AppError('Khong the nhan tin do da bi chan', 403)
-    const areFriends = await chatRepository.areFriends(userId, targetId)
-    if (!areFriends) throw new AppError('Chi co the nhan tin voi ban be', 403)
+    // Allow messaging anyone (friends + strangers). requestStatus managed on conversation.
     return chatRepository.findOrCreateDirect(userId, targetId)
   },
 
@@ -78,5 +77,17 @@ export const chatService = {
     const isParticipant = await chatRepository.isParticipant(conversationId, userId)
     if (!isParticipant) throw new AppError('Khong co quyen xoa cuoc tro chuyen', 403)
     await chatRepository.deleteConversation(conversationId, userId)
+  },
+
+  async acceptMessageRequest(conversationId: string, userId: string) {
+    const isParticipant = await chatRepository.isParticipant(conversationId, userId)
+    if (!isParticipant) throw new AppError('Khong co quyen truy cap cuoc tro chuyen', 403)
+    await chatRepository.acceptMessageRequest(conversationId, userId)
+  },
+
+  async getConversationMeta(conversationId: string, userId: string) {
+    const isParticipant = await chatRepository.isParticipant(conversationId, userId)
+    if (!isParticipant) throw new AppError('Khong co quyen truy cap cuoc tro chuyen', 403)
+    return chatRepository.getConversationMeta(conversationId)
   },
 }

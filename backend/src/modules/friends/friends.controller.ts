@@ -1,4 +1,4 @@
-﻿import { Request, Response, NextFunction } from 'express'
+import { Request, Response, NextFunction } from 'express'
 import { friendsService } from './friends.service'
 import { sendSuccess } from '../../utils/response'
 
@@ -84,6 +84,13 @@ export const friendsController = {
     try {
       await friendsService.unfriend(req.user!.userId, String(req.params.userId))
       sendSuccess(res, null, 'Đã hủy kết bạn')
+    } catch (err) { next(err) }
+  },
+
+  async getRequestCount(req: Request, res: Response, next: NextFunction) {
+    try {
+      const requests = await friendsService.getRequests(req.user!.userId)
+      sendSuccess(res, { count: requests.length })
     } catch (err) { next(err) }
   },
 }

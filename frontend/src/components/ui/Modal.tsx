@@ -7,13 +7,13 @@ interface ModalProps {
   open: boolean
   onClose: () => void
   title?: string
-  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '6xl'
   children: ReactNode
   footer?: ReactNode
   closeOnOverlay?: boolean
 }
 
-const sizeMap = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-3xl' }
+const sizeMap = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-3xl', '6xl': 'max-w-6xl' }
 
 export function Modal({ open, onClose, title, size = 'md', children, footer, closeOnOverlay = true }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
@@ -48,7 +48,7 @@ export function Modal({ open, onClose, title, size = 'md', children, footer, clo
     >
       {/* Overlay */}
       <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-[2px]"
         onClick={closeOnOverlay ? onClose : undefined}
         aria-hidden="true"
       />
@@ -57,13 +57,13 @@ export function Modal({ open, onClose, title, size = 'md', children, footer, clo
         ref={panelRef}
         tabIndex={-1}
         className={cn(
-          'relative w-full max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] bg-white rounded-xl shadow-xl animate-[fadeIn_0.15s_ease] focus:outline-none overflow-y-auto',
+          'relative w-full max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] bg-white rounded-2xl shadow-xl animate-[scaleIn_0.2s_cubic-bezier(0.34,1.56,0.64,1)] focus:outline-none overflow-y-auto',
           sizeMap[size]
         )}
       >
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-border-light">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-border-light bg-gradient-to-b from-white to-gray-50/50">
             <h2 id="modal-title" className="text-lg font-semibold text-text-primary">{title}</h2>
             <Button
               variant="ghost"

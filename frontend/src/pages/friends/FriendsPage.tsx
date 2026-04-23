@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { friendsApi } from '@/api/users'
 import { Avatar } from '@/components/ui/Avatar'
@@ -14,6 +14,7 @@ import { useAuthStore } from '@/store/authStore'
 import { chatApi } from '@/api/index'
 import { usePullToRefresh } from '@/hooks/usePullToRefresh'
 import { PullToRefreshIndicator } from '@/components/ui/PullToRefreshIndicator'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 
 type UserCardAction = {
   label: string
@@ -62,6 +63,7 @@ export default function FriendsPage() {
   const queryClient = useQueryClient()
   const { token } = useAuthStore()
   const [onlineUsers, setOnlineUsers] = useState<string[]>([])
+  const [confirmUnfriend, setConfirmUnfriend] = useState<{ id: string; name: string } | null>(null)
 
   const { data: requests, isLoading: requestsLoading } = useQuery({ queryKey: ['friend-requests'], queryFn: friendsApi.getRequests })
   const { data: sentRequests, isLoading: sentLoading } = useQuery({ queryKey: ['friend-sent-requests'], queryFn: friendsApi.getSentRequests })
@@ -100,6 +102,7 @@ export default function FriendsPage() {
       queryClient.invalidateQueries({ queryKey: ['friend-requests'] })
       queryClient.invalidateQueries({ queryKey: ['friends'] })
       queryClient.invalidateQueries({ queryKey: ['friend-suggestions'] })
+      queryClient.invalidateQueries({ queryKey: ['friend-request-count'] })
     },
     onError: (err) => toast.error(extractError(err)),
   })
@@ -110,6 +113,7 @@ export default function FriendsPage() {
       toast.success('Đã từ chối lời mời')
       queryClient.invalidateQueries({ queryKey: ['friend-requests'] })
       queryClient.invalidateQueries({ queryKey: ['friend-suggestions'] })
+      queryClient.invalidateQueries({ queryKey: ['friend-request-count'] })
     },
     onError: (err) => toast.error(extractError(err)),
   })
@@ -253,7 +257,12 @@ export default function FriendsPage() {
                 user={u}
                 actions={[
                   { label: 'Nhắn tin', onClick: () => openConversationMutation.mutate(u.id), variant: 'ghost', loading: openConversationMutation.isPending },
-                  { label: 'Hủy kết bạn', onClick: () => unfriendMutation.mutate(u.id), variant: 'secondary', loading: unfriendMutation.isPending },
+                  {
+                    label: 'Hủy kết bạn',
+                    onClick: () => setConfirmUnfriend({ id: u.id, name: u.displayName }),
+                    variant: 'secondary',
+                    loading: unfriendMutation.isPending,
+                  },
                 ]}
                 online={onlineSet.has(u.id)}
               />
@@ -262,6 +271,26 @@ export default function FriendsPage() {
         )}
       </section>
     </div>
+      <ConfirmDialog
+        open={!!confirmUnfriend}
+        onClose={() => setConfirmUnfriend(null)}
+        onConfirm={() => {
+          if (!confirmUnfriend?.id) return
+          unfriendMutation.mutate(confirmUnfriend.id, {
+            onSettled: () => setConfirmUnfriend(null),
+          })
+        }}
+        title="Xác nhận hủy kết bạn"
+        description={(
+          <span>
+            Bạn có chắc chắn muốn hủy kết bạn với <b>{confirmUnfriend?.name}</b>?
+          </span>
+        )}
+        confirmText="Hủy kết bạn"
+        cancelText="Hủy"
+        tone="danger"
+        loading={unfriendMutation.isPending}
+      />
       </div>
     </div>
   )

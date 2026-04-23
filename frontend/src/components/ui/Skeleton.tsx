@@ -1,4 +1,5 @@
 import { cn } from '@/utils/cn'
+import { useScrollFadeIn } from '@/hooks/useScrollFadeIn'
 
 interface SkeletonProps {
   className?: string
@@ -9,7 +10,7 @@ export function Skeleton({ className, rounded }: SkeletonProps) {
   return (
     <div
       className={cn(
-        'bg-border-light animate-pulse',
+        'skeleton-shimmer',
         rounded ? 'rounded-full' : 'rounded',
         className
       )}
@@ -61,8 +62,10 @@ export function ProfileSkeleton() {
 }
 
 export function UserCardSkeleton() {
+  const { ref, className, style } = useScrollFadeIn<HTMLDivElement>()
+
   return (
-    <div className="flex items-center gap-3 p-3">
+    <div ref={ref} style={style} className={cn('flex items-center gap-3 p-3', className)}>
       <Skeleton className="w-10 h-10" rounded />
       <div className="flex-1 space-y-2">
         <Skeleton className="h-4 w-24" />

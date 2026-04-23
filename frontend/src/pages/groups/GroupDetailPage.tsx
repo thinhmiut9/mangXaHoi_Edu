@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/Toast'
 import { extractError } from '@/api/client'
 import { useAuthStore } from '@/store/authStore'
 import { Modal } from '@/components/ui/Modal'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { usePullToRefresh } from '@/hooks/usePullToRefresh'
 import { PullToRefreshIndicator } from '@/components/ui/PullToRefreshIndicator'
 
@@ -74,6 +75,10 @@ export default function GroupDetailPage() {
 
   const [content, setContent] = useState('')
   const [composerOpen, setComposerOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [mobilePanel, setMobilePanel] = useState<null | 'members' | 'files' | 'memberList'>(null)
+  const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false)
+  const [confirmRemoveMember, setConfirmRemoveMember] = useState<{ id: string; name: string } | null>(null)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -165,6 +170,18 @@ export default function GroupDetailPage() {
     onError: (err) => toast.error(extractError(err)),
   })
 
+  const removeMemberMutation = useMutation({
+    mutationFn: (memberId: string) => groupsApi.removeMember(id, memberId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['group-members', id] }),
+        queryClient.invalidateQueries({ queryKey: ['group', id] }),
+      ])
+      toast.success('Đã xóa thành viên khỏi nhóm')
+    },
+    onError: (err) => toast.error(extractError(err)),
+  })
+
   const group = groupQuery.data
   const posts = useMemo(() => postsQuery.data?.pages.flatMap((page) => page.data) ?? [], [postsQuery.data])
   const members = useMemo(() => extractMembers(membersQuery.data, group?.ownerId), [membersQuery.data, group?.ownerId])
@@ -187,6 +204,11 @@ export default function GroupDetailPage() {
   )
 
   const activeBadge = weeklyActivities > 0 ? 'Nhóm đang hoạt động' : 'Nhóm ít hoạt động'
+
+  const openMobilePanel = (panel: 'members' | 'files' | 'memberList') => {
+    setMobileMenuOpen(false)
+    setMobilePanel(panel)
+  }
 
   const addTag = (tag: Tag) => {
     if (content.includes(tag)) return
@@ -242,7 +264,7 @@ export default function GroupDetailPage() {
           transition: isRefreshing || pullDistance === 0 ? 'transform 160ms ease-out' : undefined,
         }}
       >
-    <div className='min-h-screen bg-[#f3f6fb] text-slate-800'>
+    <div className='group-detail-shell min-h-screen bg-[#f3f6fb] text-slate-800'>
       <div className='mx-auto max-w-[1500px] px-0 sm:px-6 pb-8 pt-0 sm:pt-2'>
         <main className='grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_330px] gap-0 sm:gap-6'>
           <section className='space-y-4 sm:space-y-6'>
@@ -264,19 +286,61 @@ export default function GroupDetailPage() {
                     </p>
                   </div>
 
-                  <div className='flex flex-col sm:flex-row gap-2 shrink-0'>
+                  <div className='relative flex flex-col sm:flex-row gap-2 shrink-0'>
                     <button
                       onClick={() => toast.info('Tính năng mời thành viên sẽ được kết nối ở bước tiếp theo.')}
-                      className='rounded-xl bg-white px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold text-slate-800 hover:bg-slate-100'
+                      className='hidden sm:inline-flex rounded-xl bg-white px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold text-slate-800 hover:bg-slate-100'
                     >
                       Mời
                     </button>
-                    <button
-                      onClick={() => leaveMutation.mutate()}
-                      className='rounded-xl border border-white/50 bg-white/10 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold text-white hover:bg-white/20'
-                    >
-                      {leaveMutation.isPending ? 'Đang xử lý...' : 'Rời nhóm'}
-                    </button>
+                    <div className='flex items-center gap-2'>
+                      <button
+                        type='button'
+                        onClick={() => setMobileMenuOpen((prev) => !prev)}
+                        className='inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/50 bg-white/10 text-lg font-semibold text-white hover:bg-white/20 sm:hidden'
+                        aria-label='Mở thêm tùy chọn nhóm'
+                        aria-expanded={mobileMenuOpen}
+                      >
+                        ...
+                      </button>
+                      <button
+                        onClick={() => setConfirmLeaveOpen(true)}
+                        className='rounded-xl border border-white/50 bg-white/10 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold text-white hover:bg-white/20'
+                      >
+                        {leaveMutation.isPending ? 'Đang xử lý...' : 'Rời nhóm'}
+                      </button>
+                    </div>
+
+                    {mobileMenuOpen && (
+                      <div className='absolute right-0 top-[calc(100%+8px)] z-20 min-w-[190px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl sm:hidden'>
+                        <button
+                          type='button'
+                          onClick={() => openMobilePanel('members')}
+                          className='flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-50'
+                        >
+                          <span>Thành viên nổi bật</span>
+                          <span>›</span>
+                        </button>
+                        <button
+                          type='button'
+                          onClick={() => openMobilePanel('files')}
+                          className='flex w-full items-center justify-between border-t border-slate-200 px-4 py-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-50'
+                        >
+                          <span>Tài liệu nhóm</span>
+                          <span>›</span>
+                        </button>
+                        {group?.isOwner && (
+                          <button
+                            type='button'
+                            onClick={() => openMobilePanel('memberList')}
+                            className='flex w-full items-center justify-between border-t border-slate-200 px-4 py-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-50'
+                          >
+                            <span>Danh sách thành viên</span>
+                            <span>›</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -291,13 +355,13 @@ export default function GroupDetailPage() {
               </div>
             </article>
 
-            <article className='rounded-[28px] border border-emerald-100 bg-gradient-to-br from-emerald-50/60 via-white to-cyan-50/40 p-5 shadow-sm'>
+            <article className='group-detail-composer rounded-[28px] border border-emerald-100 bg-gradient-to-br from-emerald-50/60 via-white to-cyan-50/40 p-5 shadow-sm'>
               <div className='flex items-center gap-3 mb-3'>
                 <Avatar src={user?.avatar} name={user?.displayName || ''} size='md' />
                 <button
                   type='button'
                   onClick={() => setComposerOpen(true)}
-                  className='flex-1 text-left bg-white/90 rounded-full px-4 py-2.5 text-sm text-slate-600 border border-emerald-100 hover:bg-white transition-colors'
+                  className='group-detail-composer-trigger flex-1 text-left bg-white/90 rounded-full px-4 py-2.5 text-sm text-slate-600 border border-emerald-100 hover:bg-white transition-colors'
                 >
                   {`${user?.displayName || 'Bạn'} ơi, chia sẻ ý tưởng cho nhóm nhé...`}
                 </button>
@@ -305,16 +369,44 @@ export default function GroupDetailPage() {
               <hr className='border-emerald-100 mb-3' />
               <div className='flex gap-2'>
                 {[
-                  { icon: '📎', label: 'Đính kèm' },
-                  { icon: '💡', label: 'Ý tưởng' },
-                  { icon: '✅', label: 'Tiến độ' },
+                  {
+                    label: 'Đính kèm',
+                    icon: (
+                      <svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                        <path d='M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48'/>
+                      </svg>
+                    ),
+                  },
+                  {
+                    label: 'Ý tưởng',
+                    icon: (
+                      <svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                        <line x1='12' y1='2' x2='12' y2='6'/>
+                        <line x1='12' y1='18' x2='12' y2='22'/>
+                        <line x1='4.93' y1='4.93' x2='7.76' y2='7.76'/>
+                        <line x1='16.24' y1='16.24' x2='19.07' y2='19.07'/>
+                        <line x1='2' y1='12' x2='6' y2='12'/>
+                        <line x1='18' y1='12' x2='22' y2='12'/>
+                        <line x1='4.93' y1='19.07' x2='7.76' y2='16.24'/>
+                        <line x1='16.24' y1='7.76' x2='19.07' y2='4.93'/>
+                      </svg>
+                    ),
+                  },
+                  {
+                    label: 'Tiến độ',
+                    icon: (
+                      <svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                        <polyline points='20 6 9 17 4 12'/>
+                      </svg>
+                    ),
+                  },
                 ].map((a) => (
                   <button
                     key={a.label}
                     onClick={() => setComposerOpen(true)}
                     className='flex-1 flex items-center justify-center gap-2 py-2 rounded-lg hover:bg-emerald-100/60 transition-colors text-sm font-medium text-slate-700'
                   >
-                    <span>{a.icon}</span>
+                    <span className='text-slate-600'>{a.icon}</span>
                     <span className='hidden sm:block'>{a.label}</span>
                   </button>
                 ))}
@@ -343,8 +435,8 @@ export default function GroupDetailPage() {
           </section>
 
           {/* Right sidebar: hidden on mobile, shows below on sm */}
-          <aside className='space-y-4 lg:block'>
-            <article className='rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm'>
+          <aside className='hidden space-y-4 lg:block'>
+            <article className='group-detail-side-card rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm'>
               <div className='mb-3 flex items-center justify-between'>
                 <h3 className='text-lg font-bold text-slate-900'>Thành viên nổi bật</h3>
                 <button className='text-sm font-medium text-blue-600 hover:text-blue-700'>Xem tất cả</button>
@@ -377,7 +469,7 @@ export default function GroupDetailPage() {
               </div>
             </article>
 
-            <article className='rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm'>
+            <article className='group-detail-side-card rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm'>
               <div className='mb-3 flex items-center justify-between'>
                 <h3 className='text-lg font-bold text-slate-900'>Tài liệu nhóm</h3>
                 <button className='text-sm font-medium text-blue-600 hover:text-blue-700'>Tất cả</button>
@@ -493,7 +585,10 @@ export default function GroupDetailPage() {
             <div className='space-y-1'>
               {selectedFiles.map((file, idx) => ({ file, idx })).filter(item => isVideoFile(item.file)).map(({ file, idx }) => (
                 <div key={`${file.name}-${idx}`} className='flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2'>
-                  <span className='text-sm text-slate-800 truncate pr-3'>🎬 {file.name}</span>
+                  <span className='text-sm text-slate-800 truncate pr-3 flex items-center gap-1.5'>
+                    <svg className='w-3.5 h-3.5 flex-shrink-0 text-slate-500' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polygon points='23 7 16 12 23 17 23 7'/><rect x='1' y='5' width='15' height='14' rx='2' ry='2'/></svg>
+                    {file.name}
+                  </span>
                   <button className='text-xs text-slate-500 hover:text-slate-700' onClick={() => removeFileAt(idx)} aria-label='Xóa tệp video'>
                     Xóa
                   </button>
@@ -506,7 +601,10 @@ export default function GroupDetailPage() {
             <div className='space-y-1'>
               {selectedFiles.map((file, idx) => ({ file, idx })).filter(item => !isImageFile(item.file) && !isVideoFile(item.file)).map(({ file, idx }) => (
                 <div key={`${file.name}-${idx}`} className='flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2'>
-                  <span className='text-sm text-slate-800 truncate pr-3'>📄 {file.name}</span>
+                  <span className='text-sm text-slate-800 truncate pr-3 flex items-center gap-1.5'>
+                    <svg className='w-3.5 h-3.5 flex-shrink-0 text-slate-500' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><polyline points='14 2 14 8 20 8'/></svg>
+                    {file.name}
+                  </span>
                   <button className='text-xs text-slate-500 hover:text-slate-700' onClick={() => removeFileAt(idx)} aria-label='Xóa tệp'>
                     Xóa
                   </button>
@@ -516,6 +614,142 @@ export default function GroupDetailPage() {
           )}
         </div>
       </Modal>
+
+      <Modal
+        open={mobilePanel !== null}
+        onClose={() => setMobilePanel(null)}
+        title={
+          mobilePanel === 'members'
+            ? 'Thành viên nổi bật'
+            : mobilePanel === 'memberList'
+              ? 'Danh sách thành viên'
+              : 'Tài liệu nhóm'
+        }
+        size='lg'
+      >
+        {mobilePanel === 'members' ? (
+          <div className='space-y-3'>
+            {membersQuery.isLoading ? (
+              <p className='text-sm text-slate-500'>Đang tải thành viên...</p>
+            ) : featuredMembers.length === 0 ? (
+              <p className='text-sm text-slate-500'>Chưa có dữ liệu thành viên.</p>
+            ) : (
+              featuredMembers.map((member: GroupMember) => (
+                <div key={member.id} className='flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-2.5'>
+                  <div className='flex items-center gap-2.5'>
+                    <Avatar src={member.avatar} name={member.name} size='sm' />
+                    <div>
+                      <p className='text-sm font-semibold text-slate-900'>{member.name}</p>
+                      <p className='text-xs text-slate-500'>{member.roleText}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => toast.info('Tính năng nhắn tin đang dùng tại trang Chat.')}
+                    className='rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100'
+                  >
+                    Nhắn tin
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        ) : mobilePanel === 'memberList' ? (
+          <div className='space-y-3'>
+            {membersQuery.isLoading ? (
+              <p className='text-sm text-slate-500'>Đang tải thành viên...</p>
+            ) : members.length === 0 ? (
+              <p className='text-sm text-slate-500'>Chưa có dữ liệu thành viên.</p>
+            ) : (
+              members.map((member: GroupMember) => {
+                const canRemove = !!group?.isOwner && member.id !== user?.id && member.role !== 'OWNER'
+                return (
+                  <div key={member.id} className='flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-2.5'>
+                    <div className='flex min-w-0 items-center gap-2.5'>
+                      <Avatar src={member.avatar} name={member.name} size='sm' />
+                      <div className='min-w-0'>
+                        <p className='truncate text-sm font-semibold text-slate-900'>{member.name}</p>
+                        <p className='text-xs text-slate-500'>{member.roleText}</p>
+                      </div>
+                    </div>
+                    {canRemove ? (
+                      <button
+                        type='button'
+                        onClick={() => setConfirmRemoveMember({ id: member.id, name: member.name })}
+                        disabled={removeMemberMutation.isPending}
+                        className='rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60'
+                      >
+                        Kick
+                      </button>
+                    ) : (
+                      <span className='text-xs font-medium text-slate-400'>{member.id === user?.id ? 'Bạn' : member.roleText}</span>
+                    )}
+                  </div>
+                )
+              })
+            )}
+          </div>
+        ) : (
+          <div className='space-y-2.5'>
+            {files.length === 0 ? (
+              <p className='text-sm text-slate-500'>Chưa có tệp đính kèm trong bài viết.</p>
+            ) : (
+              files.map((file) => (
+                <div key={file.id} className='flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5'>
+                  <div className='min-w-0'>
+                    <p className='truncate text-sm font-medium text-slate-800'>{file.name}</p>
+                    <p className='text-xs text-slate-500'>{file.size}</p>
+                  </div>
+                  <a
+                    href={file.url}
+                    target='_blank'
+                    rel='noreferrer'
+                    className='rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100'
+                  >
+                    Mở
+                  </a>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        open={confirmLeaveOpen}
+        onClose={() => setConfirmLeaveOpen(false)}
+        onConfirm={() => leaveMutation.mutate(undefined, { onSettled: () => setConfirmLeaveOpen(false) })}
+        title="Xác nhận rời nhóm"
+        description={(
+          <span>
+            Bạn có chắc chắn muốn rời nhóm <b>{group.name}</b>?
+          </span>
+        )}
+        confirmText="Rời nhóm"
+        cancelText="Hủy"
+        tone="warning"
+        loading={leaveMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={!!confirmRemoveMember}
+        onClose={() => setConfirmRemoveMember(null)}
+        onConfirm={() => {
+          if (!confirmRemoveMember?.id) return
+          removeMemberMutation.mutate(confirmRemoveMember.id, {
+            onSettled: () => setConfirmRemoveMember(null),
+          })
+        }}
+        title="Xác nhận xóa thành viên"
+        description={(
+          <span>
+            Bạn có chắc chắn muốn kick <b>{confirmRemoveMember?.name}</b> khỏi nhóm không?
+          </span>
+        )}
+        confirmText="Kick khỏi nhóm"
+        cancelText="Hủy"
+        tone="danger"
+        loading={removeMemberMutation.isPending}
+      />
 
       </div>
     </div>

@@ -1,20 +1,38 @@
 import { runQuery, runQueryOne } from '../../config/neo4j'
 import { User, UserPublic, FriendStatus } from '../../types'
 
+/** Normalize userId: replace spaces with hyphens to fix corrupted UUID data in Neo4j */
+function normalizeUserId<T extends { userId?: string }>(user: T): T {
+  if (user.userId) return { ...user, userId: user.userId.trim().replace(/\s+/g, '-') }
+  return user
+}
+
+function normalizeUserIdParam(userId: string): string {
+  return userId.trim().replace(/\s+/g, '-')
+}
+
 export const friendsRepository = {
   async isBlockedBetween(userId: string, targetId: string): Promise<boolean> {
+    const normalizedUserId = normalizeUserIdParam(userId)
+    const normalizedTargetId = normalizeUserIdParam(targetId)
     const result = await runQueryOne<{ blocked: boolean }>(
-      `MATCH (u:User {userId: $userId}), (t:User {userId: $targetId})
+      `MATCH (u:User), (t:User)
+       WHERE replace(trim(coalesce(u.userId, '')), ' ', '-') = $userId
+         AND replace(trim(coalesce(t.userId, '')), ' ', '-') = $targetId
        RETURN EXISTS((u)-[:BLOCKED]->(t)) OR EXISTS((t)-[:BLOCKED]->(u)) AS blocked`,
-      { userId, targetId }
+      { userId: normalizedUserId, targetId: normalizedTargetId }
     )
     return !!result?.blocked
   },
 
   async getStatus(userId: string, targetId: string): Promise<{ status: FriendStatus | 'PENDING_RECEIVED' | null; direction: 'sent' | 'received' | null }> {
+    const normalizedUserId = normalizeUserIdParam(userId)
+    const normalizedTargetId = normalizeUserIdParam(targetId)
     const result = await runQueryOne<{ status: string; direction: string }>(
-      `MATCH (u:User {userId: $userId})
-       OPTIONAL MATCH (u)-[r:REQUESTED]->(t:User {userId: $targetId})
+      `MATCH (u:User), (t:User)
+       WHERE replace(trim(coalesce(u.userId, '')), ' ', '-') = $userId
+         AND replace(trim(coalesce(t.userId, '')), ' ', '-') = $targetId
+       OPTIONAL MATCH (u)-[r:REQUESTED]->(t)
        OPTIONAL MATCH (t)-[r2:REQUESTED]->(u)
        OPTIONAL MATCH (u)-[f]-(t)
        WHERE type(f) IN ['FRIENDS_WITH']
@@ -26,7 +44,7 @@ export const friendsRepository = {
            ELSE NULL
          END AS status,
          CASE WHEN r IS NOT NULL THEN 'sent' WHEN r2 IS NOT NULL THEN 'received' ELSE NULL END AS direction`,
-      { userId, targetId }
+      { userId: normalizedUserId, targetId: normalizedTargetId }
     )
     if (!result?.status) return { status: null, direction: null }
     return {
@@ -37,76 +55,106 @@ export const friendsRepository = {
 
   async sendRequest(userId: string, targetId: string): Promise<void> {
     const now = new Date().toISOString()
+    const normalizedUserId = normalizeUserIdParam(userId)
+    const normalizedTargetId = normalizeUserIdParam(targetId)
     await runQuery(
-      `MATCH (u:User {userId: $userId}), (t:User {userId: $targetId})
+      `MATCH (u:User), (t:User)
+       WHERE replace(trim(coalesce(u.userId, '')), ' ', '-') = $userId
+         AND replace(trim(coalesce(t.userId, '')), ' ', '-') = $targetId
        MERGE (u)-[r:REQUESTED]->(t) SET r.createdAt = $now`,
-      { userId, targetId, now }
+      { userId: normalizedUserId, targetId: normalizedTargetId, now }
     )
   },
 
   async acceptRequest(userId: string, requesterId: string): Promise<void> {
     const now = new Date().toISOString()
+    const normalizedUserId = normalizeUserIdParam(userId)
+    const normalizedRequesterId = normalizeUserIdParam(requesterId)
     await runQuery(
-      `MATCH (requester:User {userId: $requesterId})-[r:REQUESTED]->(u:User {userId: $userId})
+      `MATCH (requester:User)-[r:REQUESTED]->(u:User)
+       WHERE replace(trim(coalesce(requester.userId, '')), ' ', '-') = $requesterId
+         AND replace(trim(coalesce(u.userId, '')), ' ', '-') = $userId
        DELETE r
        MERGE (u)-[:FRIENDS_WITH {since: $now}]-(requester)`,
-      { userId, requesterId, now }
+      { userId: normalizedUserId, requesterId: normalizedRequesterId, now }
     )
   },
 
   async rejectRequest(userId: string, requesterId: string): Promise<void> {
+    const normalizedUserId = normalizeUserIdParam(userId)
+    const normalizedRequesterId = normalizeUserIdParam(requesterId)
     await runQuery(
-      `MATCH (requester:User {userId: $requesterId})-[r:REQUESTED]->(u:User {userId: $userId}) DELETE r`,
-      { userId, requesterId }
+      `MATCH (requester:User)-[r:REQUESTED]->(u:User)
+       WHERE replace(trim(coalesce(requester.userId, '')), ' ', '-') = $requesterId
+         AND replace(trim(coalesce(u.userId, '')), ' ', '-') = $userId
+       DELETE r`,
+      { userId: normalizedUserId, requesterId: normalizedRequesterId }
     )
   },
 
   async unfriend(userId: string, targetId: string): Promise<void> {
+    const normalizedUserId = normalizeUserIdParam(userId)
+    const normalizedTargetId = normalizeUserIdParam(targetId)
     await runQuery(
-      `MATCH (u:User {userId: $userId})-[r]-(t:User {userId: $targetId})
-       WHERE type(r) IN ['FRIENDS_WITH']
+      `MATCH (u:User)-[r]-(t:User)
+       WHERE replace(trim(coalesce(u.userId, '')), ' ', '-') = $userId
+         AND replace(trim(coalesce(t.userId, '')), ' ', '-') = $targetId
+         AND type(r) IN ['FRIENDS_WITH']
        DELETE r`,
-      { userId, targetId }
+      { userId: normalizedUserId, targetId: normalizedTargetId }
     )
   },
 
-  async getFriends(userId: string, skip = 0, limit = 20): Promise<UserPublic[]> {
+  async getFriends(userId: string, skip = 0, limit?: number): Promise<UserPublic[]> {
+    const normalizedUserId = normalizeUserIdParam(userId)
+    const paginationClause = limit === undefined
+      ? ''
+      : 'SKIP toInteger($skip) LIMIT toInteger($limit)'
     const results = await runQuery<{ f: { properties: UserPublic } }>(
-      `MATCH (u:User {userId: $userId})-[r]-(f:User)
-       WHERE type(r) IN ['FRIENDS_WITH']
+      `MATCH (u:User)-[r]-(f:User)
+       WHERE replace(trim(coalesce(u.userId, '')), ' ', '-') = $userId
+         AND type(r) IN ['FRIENDS_WITH']
          AND coalesce(f.role, 'USER') <> 'ADMIN'
        WITH DISTINCT f
-       RETURN f ORDER BY f.displayName SKIP toInteger($skip) LIMIT toInteger($limit)`,
-      { userId, skip, limit }
+       RETURN f ORDER BY f.displayName ${paginationClause}`,
+      { userId: normalizedUserId, skip, limit }
     )
-    return results.map(r => r.f.properties)
+    return results.map(r => normalizeUserId(r.f.properties))
   },
 
   async getPendingRequests(userId: string): Promise<UserPublic[]> {
+    const normalizedUserId = normalizeUserIdParam(userId)
     const results = await runQuery<{ u: { properties: UserPublic } }>(
-      `MATCH (u:User)-[:REQUESTED]->(me:User {userId: $userId})
-       WHERE coalesce(u.role, 'USER') <> 'ADMIN'
+      `MATCH (u:User)-[:REQUESTED]->(me:User)
+       WHERE replace(trim(coalesce(me.userId, '')), ' ', '-') = $userId
+         AND coalesce(u.role, 'USER') <> 'ADMIN'
        RETURN u ORDER BY u.displayName`,
-      { userId }
+      { userId: normalizedUserId }
     )
-    return results.map(r => r.u.properties)
+    return results.map(r => normalizeUserId(r.u.properties))
   },
 
   async getSentRequests(userId: string): Promise<UserPublic[]> {
+    const normalizedUserId = normalizeUserIdParam(userId)
     const results = await runQuery<{ u: { properties: UserPublic } }>(
-      `MATCH (me:User {userId: $userId})-[:REQUESTED]->(u:User)
-       WHERE coalesce(u.role, 'USER') <> 'ADMIN'
+      `MATCH (me:User)-[:REQUESTED]->(u:User)
+       WHERE replace(trim(coalesce(me.userId, '')), ' ', '-') = $userId
+         AND coalesce(u.role, 'USER') <> 'ADMIN'
        RETURN u ORDER BY u.displayName`,
-      { userId }
+      { userId: normalizedUserId }
     )
-    return results.map(r => r.u.properties)
+    return results.map(r => normalizeUserId(r.u.properties))
   },
 
   async cancelRequest(userId: string, targetId: string): Promise<void> {
+    const normalizedUserId = normalizeUserIdParam(userId)
+    const normalizedTargetId = normalizeUserIdParam(targetId)
     await runQuery(
-      `MATCH (u:User {userId: $userId})-[r:REQUESTED]->(t:User {userId: $targetId})
+      `MATCH (u:User)-[r:REQUESTED]->(t:User)
+       WHERE replace(trim(coalesce(u.userId, '')), ' ', '-') = $userId
+         AND replace(trim(coalesce(t.userId, '')), ' ', '-') = $targetId
        DELETE r`,
-      { userId, targetId }
+      { userId: normalizedUserId, targetId: normalizedTargetId }
     )
   },
 

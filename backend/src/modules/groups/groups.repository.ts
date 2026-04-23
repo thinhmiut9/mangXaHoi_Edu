@@ -166,6 +166,14 @@ export const groupsRepository = {
     )
   },
 
+  async removeMember(groupId: string, userId: string): Promise<void> {
+    await runQuery(
+      `MATCH (u:User {userId: $userId})-[r:MEMBER_OF]->(g:Group {groupId: $groupId})
+       DELETE r`,
+      { userId, groupId }
+    )
+  },
+
   async update(groupId: string, data: Partial<{ name: string; description: string; coverUrl: string; privacy: string; status: string }>): Promise<Group | null> {
     const now = new Date().toISOString()
     const setClauses = Object.entries(data).filter(([, v]) => v !== undefined).map(([k]) => `g.${k} = $${k}`).join(', ')

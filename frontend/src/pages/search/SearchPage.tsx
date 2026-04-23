@@ -12,7 +12,6 @@ import { timeAgo } from '@/utils/format'
 type SearchTab = 'ALL' | 'USERS' | 'POSTS' | 'GROUPS'
 
 const RECENT_SEARCH_KEY = 'edusocial.recent.search'
-const MOBILE_BG = 'linear-gradient(170deg, #EFF6FF 0%, #F8FAFF 42%, #FFFFFF 100%)'
 
 function SearchIcon() {
   return (
@@ -180,16 +179,15 @@ export default function SearchPage() {
   return (
     <div className="space-y-5 pb-4">
       <section
-        className="relative overflow-hidden rounded-[28px] border border-white/60 p-4 shadow-[0_20px_60px_rgba(37,99,235,0.16)] md:p-6"
-        style={{ background: MOBILE_BG }}
+        className="search-hero-panel relative overflow-hidden rounded-[28px] border p-4 shadow-[0_20px_60px_rgba(37,99,235,0.16)] md:p-6"
       >
-        <div className="pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full bg-blue-300/40 blur-3xl" />
-        <div className="pointer-events-none absolute -right-12 -top-8 h-48 w-48 rounded-full bg-sky-200/60 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-16 left-1/3 h-44 w-44 rounded-full bg-indigo-100/70 blur-3xl" />
+        <div className="search-hero-glow search-hero-glow-left pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full blur-3xl" />
+        <div className="search-hero-glow search-hero-glow-right pointer-events-none absolute -right-12 -top-8 h-48 w-48 rounded-full blur-3xl" />
+        <div className="search-hero-glow search-hero-glow-bottom pointer-events-none absolute -bottom-16 left-1/3 h-44 w-44 rounded-full blur-3xl" />
 
         <div className="relative">
           <div className="text-center">
-            <p className="mx-auto mb-2 inline-flex rounded-full border border-blue-100 bg-white/70 px-3 py-1 text-xs font-semibold text-blue-700 backdrop-blur-md">
+            <p className="search-hero-tag mx-auto mb-2 inline-flex rounded-full border px-3 py-1 text-xs font-semibold backdrop-blur-md">
               EduSocial Search
             </p>
             <h1 className="text-[28px] font-black leading-tight tracking-tight text-slate-900 md:text-4xl">
@@ -201,8 +199,8 @@ export default function SearchPage() {
           </div>
 
           <form onSubmit={onSubmit} className="mx-auto mt-4 max-w-2xl">
-            <div className="rounded-[22px] border border-white/70 bg-white/65 p-2 shadow-[0_10px_28px_rgba(15,23,42,0.14)] backdrop-blur-xl">
-              <div className="flex items-center gap-2 rounded-2xl bg-white/80 px-2">
+            <div className="search-hero-search-shell rounded-[22px] border p-2 shadow-[0_10px_28px_rgba(15,23,42,0.14)] backdrop-blur-xl">
+              <div className="search-hero-search-row flex items-center gap-2 rounded-2xl px-2">
                 <div className="px-2">
                   <SearchIcon />
                 </div>
@@ -211,7 +209,7 @@ export default function SearchPage() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Tìm theo tên, email, bài viết hoặc nhóm..."
-                  className="h-12 flex-1 bg-transparent text-[15px] text-slate-800 placeholder:text-slate-400 focus:outline-none"
+                  className="search-hero-input h-12 flex-1 bg-transparent text-[15px] focus:outline-none"
                 />
                 <Button type="submit" className="h-11 rounded-xl bg-[#2563EB] px-4 text-white shadow-[0_10px_24px_rgba(37,99,235,0.35)] transition-all hover:scale-[1.02] hover:brightness-105 active:scale-[0.98]">
                   Tìm
@@ -231,14 +229,14 @@ export default function SearchPage() {
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key as SearchTab)}
                 className={`rounded-full px-4 py-2 text-sm font-semibold transition-all ${activeTab === tab.key
-                  ? 'bg-[#2563EB] text-white shadow-[0_8px_18px_rgba(37,99,235,0.35)]'
-                  : 'bg-white/80 text-slate-600 hover:bg-white hover:text-slate-800'
+                  ? 'search-tab-active bg-[#2563EB] text-white shadow-[0_8px_18px_rgba(37,99,235,0.35)]'
+                  : 'search-tab-inactive'
                   }`}
               >
                 {tab.label}
               </button>
             ))}
-            <span className="ml-auto rounded-full bg-white/70 px-3 py-1 text-xs font-semibold text-slate-500">
+            <span className="search-hero-count ml-auto rounded-full px-3 py-1 text-xs font-semibold">
               {keyword ? `${totalResults} kết quả` : 'Nhập ít nhất 2 ký tự'}
             </span>
           </div>
@@ -477,4 +475,3 @@ export default function SearchPage() {
     </div>
   )
 }
-

@@ -12,9 +12,9 @@ export function Card({ padding = 'md', hover, className, children, ...props }: C
   return (
     <div
       className={cn(
-        'bg-white rounded-xl shadow-card border border-border-light transition-all duration-200',
+        'bg-white rounded-2xl shadow-card border border-border-light transition-all duration-300',
         paddingMap[padding],
-        hover && 'hover:shadow-md hover:-translate-y-[1px] cursor-pointer',
+        hover && 'hover:shadow-lg hover:-translate-y-[2px] cursor-pointer',
         className
       )}
       {...props}

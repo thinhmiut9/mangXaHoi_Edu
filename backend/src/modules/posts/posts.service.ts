@@ -16,6 +16,7 @@ import { notificationsService } from '../notifications/notifications.service'
 import { groupsRepository } from '../groups/groups.repository'
 import { cloudinaryV2 } from '../../config/cloudinary'
 import { extractMentionedUserIds } from '../../utils/mention'
+import { usersRepository } from '../users/users.repository'
 
 function sanitizePostMedia(post: Post): Post {
   const imageUrls = filterCloudinaryImageUrls(post.imageUrls)
@@ -142,6 +143,19 @@ function normalizeIncomingMedia(dto: Pick<CreatePostDto, 'imageUrls' | 'videoUrl
   }
 }
 
+/** Batch-fetch original posts for shared posts and attach as originalPost */
+async function enrichPostsWithOriginal(posts: Post[]): Promise<Post[]> {
+  const ids = [...new Set(posts.map(p => (p as any).sharedFromPostId).filter(Boolean))]
+  if (!ids.length) return posts
+  const originalMap = await postsRepository.findManyByIds(ids)
+  return posts.map(post => {
+    const sharedFrom = (post as any).sharedFromPostId
+    if (!sharedFrom || !originalMap[sharedFrom]) return post
+    const original = sanitizePostMedia(originalMap[sharedFrom])
+    return { ...post, originalPost: original } as Post
+  })
+}
+
 export const postsService = {
   async getFeed(viewerId: string, page: number, limit: number) {
     const skip = (page - 1) * limit
@@ -149,7 +163,8 @@ export const postsService = {
     const hasNext = rows.length > limit
     const posts = hasNext ? rows.slice(0, limit) : rows
     const estimatedTotal = skip + posts.length + (hasNext ? 1 : 0)
-    return { posts: posts.map(sanitizePostMedia), meta: paginationMeta(page, limit, estimatedTotal) }
+    const enriched = await enrichPostsWithOriginal(posts.map(sanitizePostMedia))
+    return { posts: enriched, meta: paginationMeta(page, limit, estimatedTotal) }
   },
 
   async createPost(userId: string, dto: CreatePostDto) {
@@ -286,10 +301,10 @@ export const postsService = {
     return postsRepository.togglePin(postId, userId)
   },
 
-  async sharePost(postId: string, userId: string) {
+  async sharePost(postId: string, userId: string, caption?: string, visibility?: string) {
     const post = await postsRepository.findById(postId)
     if (!post) throw new AppError('Bài viết không tồn tại', 404, 'POST_NOT_FOUND')
-    return postsRepository.sharePost(postId, userId, uuidv4())
+    return postsRepository.sharePost(postId, userId, uuidv4(), caption, visibility)
   },
 
   async getReactions(postId: string) {
@@ -306,8 +321,19 @@ export const postsService = {
 
   async getUserPosts(userId: string, viewerId: string, page: number, limit: number) {
     const skip = (page - 1) * limit
+    const owner = await usersRepository.findById(userId)
+    if (!owner || owner.status === 'BLOCKED') {
+      throw new AppError('Nguoi dung khong ton tai', 404, 'USER_NOT_FOUND')
+    }
+    if (owner.profileVisibility === 'PRIVATE' && owner.userId !== viewerId) {
+      const relation = await friendsRepository.getStatus(viewerId, owner.userId)
+      if (relation.status !== 'ACCEPTED') {
+        return { posts: [], meta: paginationMeta(page, limit, skip) }
+      }
+    }
     const posts = await postsRepository.getUserPosts(userId, viewerId, skip, limit)
-    return { posts: posts.map(sanitizePostMedia), meta: paginationMeta(page, limit, posts.length + skip) }
+    const enriched = await enrichPostsWithOriginal(posts.map(sanitizePostMedia))
+    return { posts: enriched, meta: paginationMeta(page, limit, posts.length + skip) }
   },
 
   async getGroupPosts(groupId: string, viewerId: string, page: number, limit: number) {

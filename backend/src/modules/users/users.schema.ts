@@ -4,10 +4,16 @@ import { isCloudinaryImageUrl } from '../../utils/cloudinary'
 export const updateProfileSchema = z.object({
   displayName: z.string().min(2).max(50).optional(),
   bio: z.string().max(300).optional(),
-  avatarUrl: z.string().url().refine(isCloudinaryImageUrl, 'Ảnh đại diện phải là ảnh Cloudinary').optional(),
-  coverUrl: z.string().url().refine(isCloudinaryImageUrl, 'Ảnh bìa phải là ảnh Cloudinary').optional(),
+  avatarUrl: z.union([
+    z.string().url().refine(isCloudinaryImageUrl, 'Ảnh đại diện phải là ảnh Cloudinary'),
+    z.literal(''),
+  ]).optional().nullable(),
+  coverUrl: z.union([
+    z.string().url().refine(isCloudinaryImageUrl, 'Ảnh bìa phải là ảnh Cloudinary'),
+    z.literal(''),
+  ]).optional().nullable(),
   location: z.string().max(120).optional(),
-  profileVisibility: z.enum(['PUBLIC', 'FRIENDS', 'PRIVATE']).optional(),
+  profileVisibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
 })
 
 export const searchUsersSchema = z.object({

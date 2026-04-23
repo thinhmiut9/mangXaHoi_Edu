@@ -41,5 +41,19 @@ export const chatController = {
       sendSuccess(res, null, 'Da xoa cuoc tro chuyen phia ban')
     } catch (err) { next(err) }
   },
+
+  async acceptMessageRequest(req: Request, res: Response, next: NextFunction) {
+    try {
+      await chatService.acceptMessageRequest(String(req.params.id), req.user!.userId)
+      sendSuccess(res, null, 'Da chap nhan tin nhan')
+    } catch (err) { next(err) }
+  },
+
+  async getConversationMeta(req: Request, res: Response, next: NextFunction) {
+    try {
+      const meta = await chatService.getConversationMeta(String(req.params.id), req.user!.userId)
+      sendSuccess(res, meta)
+    } catch (err) { next(err) }
+  },
 }
 

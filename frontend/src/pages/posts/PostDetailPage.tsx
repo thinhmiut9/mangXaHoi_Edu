@@ -1,4 +1,4 @@
-﻿import { useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { postsApi } from '@/api/posts'
 import { PostCard } from '@/components/shared/PostCard'

@@ -3,8 +3,9 @@ import { AppError } from '../../middleware/errorHandler'
 import { notificationsService } from '../notifications/notifications.service'
 
 export const friendsService = {
-  async getFriends(userId: string, page = 1, limit = 20) {
-    return friendsRepository.getFriends(userId, (page - 1) * limit, limit)
+  async getFriends(userId: string, page?: number, limit?: number) {
+    const skip = page && limit ? (page - 1) * limit : 0
+    return friendsRepository.getFriends(userId, skip, limit)
   },
 
   async getRequests(userId: string) {

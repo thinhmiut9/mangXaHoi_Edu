@@ -4,6 +4,7 @@ import { forwardRef, InputHTMLAttributes } from 'react'
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string
   error?: string
+  success?: boolean
   hint?: string
   leftIcon?: React.ReactNode
   rightIcon?: React.ReactNode
@@ -11,7 +12,7 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, hint, leftIcon, rightIcon, fullWidth, className, id, ...props }, ref) => {
+  ({ label, error, success, hint, leftIcon, rightIcon, fullWidth, className, id, ...props }, ref) => {
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-')
     return (
       <div className={cn('flex flex-col gap-1.5', fullWidth && 'w-full')}>
@@ -31,13 +32,15 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             id={inputId}
             className={cn(
-              'w-full h-10 rounded-lg border bg-white px-3 text-base text-text-primary placeholder:text-text-muted',
-              'transition-all duration-200',
-              'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
+              'w-full h-11 rounded-xl border bg-[#f8fafc] px-3 text-base text-text-primary placeholder:text-text-muted',
+              'transition-[box-shadow,border-color,background-color] duration-200 ease-out',
+              'focus:outline-none focus:border-primary-500 focus:shadow-[0_0_0_3px_rgba(24,119,242,0.15),0_1px_3px_rgba(0,0,0,0.05)]',
               'disabled:opacity-50 disabled:bg-hover-bg disabled:cursor-not-allowed',
               error
-                ? 'border-error-500 focus:ring-error-500'
-                : 'border-border-main hover:border-border-main',
+                ? 'border-error-500 focus:border-error-500 focus:shadow-[0_0_0_3px_rgba(239,68,68,0.15),0_1px_3px_rgba(0,0,0,0.05)]'
+                : success
+                  ? 'border-success focus:border-success focus:shadow-[0_0_0_3px_rgba(34,197,94,0.15),0_1px_3px_rgba(0,0,0,0.05)] hover:border-success'
+                : 'border-border-main hover:border-primary-300',
               leftIcon && 'pl-10',
               rightIcon && 'pr-10',
               className

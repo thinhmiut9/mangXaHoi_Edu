@@ -62,6 +62,13 @@ export const groupsController = {
     } catch (err) { next(err) }
   },
 
+  async removeMember(req: Request, res: Response, next: NextFunction) {
+    try {
+      await groupsService.removeMember(String(req.params.id), req.user!.userId, String(req.params.userId))
+      sendSuccess(res, null, 'Đã xóa thành viên khỏi nhóm')
+    } catch (err) { next(err) }
+  },
+
   async getJoinRequests(req: Request, res: Response, next: NextFunction) {
     try {
       const requests = await groupsService.getJoinRequests(String(req.params.id), req.user!.userId)

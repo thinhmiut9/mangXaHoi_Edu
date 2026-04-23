@@ -38,6 +38,8 @@ export interface Conversation {
   lastMessage?: { content: string; createdAt: string }
   unreadCount: number
   updatedAt: string
+  requestStatus?: 'PENDING' | 'ACCEPTED'
+  requesterId?: string
 }
 
 export interface Message {
@@ -167,6 +169,7 @@ export const groupsApi = {
       .then(r => ({ status: r.data.data?.status ?? 'JOINED', message: r.data.message ?? '' })),
   leave: (id: string) => apiClient.delete(`/groups/${id}/leave`),
   getMembers: (id: string) => apiClient.get(`/groups/${id}/members`).then(r => r.data),
+  removeMember: (id: string, userId: string) => apiClient.delete(`/groups/${id}/members/${userId}`),
   getJoinRequests: (id: string): Promise<GroupJoinRequest[]> =>
     apiClient.get<ApiResponse<any[]>>(`/groups/${id}/requests`).then(r =>
       (r.data.data ?? []).map((raw: any) => {
@@ -216,6 +219,10 @@ export const chatApi = {
     apiClient.put(`/chat/conversations/${conversationId}/read`),
   deleteConversation: (conversationId: string) =>
     apiClient.delete(`/chat/conversations/${conversationId}`),
+  acceptMessageRequest: (conversationId: string) =>
+    apiClient.put(`/chat/conversations/${conversationId}/accept`),
+  getConversationMeta: (conversationId: string): Promise<{ requestStatus: string; requesterId: string | null }> =>
+    apiClient.get<ApiResponse<any>>(`/chat/conversations/${conversationId}/meta`).then(r => r.data.data ?? { requestStatus: 'ACCEPTED', requesterId: null }),
 }
 
 export const reportsApi = {

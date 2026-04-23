@@ -7,7 +7,7 @@ import { AppError } from '../../middleware/errorHandler'
 import { env } from '../../config/env'
 import { sendMail, resetPasswordTemplate, welcomeTemplate } from '../../utils/email'
 import { JwtPayload } from '../../middleware/requireAuth'
-import { RegisterDto, LoginDto, ForgotPasswordDto, ResetPasswordDto } from './auth.schema'
+import { RegisterDto, LoginDto, ForgotPasswordDto, ResetPasswordDto, ChangePasswordDto } from './auth.schema'
 import { User, UserPublic } from '../../types'
 import { usersRepository } from '../users/users.repository'
 
@@ -112,6 +112,26 @@ export const authService = {
 
     const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS)
     await authRepository.updatePassword(user.userId, passwordHash)
+  },
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await authRepository.findByIdForAuth(userId)
+    if (!user) {
+      throw new AppError('Nguoi dung khong tim thay', 404, 'USER_NOT_FOUND')
+    }
+
+    const isCurrentPasswordValid = await bcrypt.compare(dto.currentPassword, user.passwordHash)
+    if (!isCurrentPasswordValid) {
+      throw new AppError('Mat khau hien tai khong dung', 400, 'INVALID_CURRENT_PASSWORD')
+    }
+
+    const isSamePassword = await bcrypt.compare(dto.newPassword, user.passwordHash)
+    if (isSamePassword) {
+      throw new AppError('Mat khau moi phai khac mat khau hien tai', 400, 'PASSWORD_NOT_CHANGED')
+    }
+
+    const newPasswordHash = await bcrypt.hash(dto.newPassword, SALT_ROUNDS)
+    await authRepository.updatePassword(user.userId, newPasswordHash)
   },
 
   async getMe(userId: string) {

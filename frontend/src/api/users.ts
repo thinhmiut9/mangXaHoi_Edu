@@ -14,6 +14,7 @@ export const usersApi = {
         friendsCount: toNumber(r.data.data?.friendsCount),
         groupsCount: toNumber(r.data.data?.groupsCount),
         isOwnProfile: !!r.data.data?.isOwnProfile,
+        canViewPrivateContent: !!r.data.data?.canViewPrivateContent,
       }
     }),
 
@@ -23,7 +24,7 @@ export const usersApi = {
   getUserFriends: (id: string) =>
     apiClient.get<ApiResponse<any[]>>(`/users/${id}/friends`).then(r => (r.data.data ?? []).map(normalizeUser)),
 
-  updateProfile: (data: { displayName?: string; bio?: string; avatar?: string; coverPhoto?: string; location?: string; profileVisibility?: 'PUBLIC' | 'FRIENDS' | 'PRIVATE' }) =>
+  updateProfile: (data: { displayName?: string; bio?: string; avatar?: string; coverPhoto?: string; location?: string; profileVisibility?: 'PUBLIC' | 'PRIVATE' }) =>
     apiClient.put<ApiResponse<any>>('/users/me', {
       displayName: data.displayName,
       bio: data.bio,
@@ -113,6 +114,9 @@ export const friendsApi = {
 
   getRequests: () =>
     apiClient.get<ApiResponse<any[]>>('/friends/requests').then(r => (r.data.data ?? []).map(normalizeUser) as User[]),
+
+  getRequestCount: (): Promise<number> =>
+    apiClient.get<ApiResponse<{ count: number }>>('/friends/requests/count').then(r => r.data.data?.count ?? 0),
 
   getSentRequests: () =>
     apiClient.get<ApiResponse<any[]>>('/friends/requests/sent').then(r => (r.data.data ?? []).map(normalizeUser) as User[]),

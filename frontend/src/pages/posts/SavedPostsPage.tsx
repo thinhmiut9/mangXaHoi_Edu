@@ -1,4 +1,4 @@
-﻿import { useInfiniteQuery } from '@tanstack/react-query'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { postsApi } from '@/api/posts'
 import { PostCard } from '@/components/shared/PostCard'
 import { PostSkeleton } from '@/components/ui/Skeleton'

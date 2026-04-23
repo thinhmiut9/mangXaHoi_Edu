@@ -20,6 +20,9 @@ const GroupsPage         = lazy(() => import('@/pages/groups/GroupsPage'))
 const GroupDetailPage    = lazy(() => import('@/pages/groups/GroupDetailPage'))
 const ChatPage           = lazy(() => import('@/pages/chat/ChatPage'))
 const NotificationsPage  = lazy(() => import('@/pages/notifications/NotificationsPage'))
+const DocumentsPage      = lazy(() => import('@/pages/documents/DocumentsPage'))
+const SavedDocumentsPage = lazy(() => import('@/pages/documents/SavedDocumentsPage'))
+const MyUploadedDocumentsPage = lazy(() => import('@/pages/documents/MyUploadedDocumentsPage'))
 
 const AdminLayout        = lazy(() => import('@/components/layout/AdminLayout'))
 const AdminDashboard     = lazy(() => import('@/pages/admin/AdminDashboardPage'))
@@ -95,6 +98,9 @@ const router = createBrowserRouter([
               { path: '/chat',                element: <ChatPage /> },
               { path: '/chat/:conversationId', element: <ChatPage /> },
               { path: '/notifications',       element: <NotificationsPage /> },
+              { path: '/documents',           element: <DocumentsPage /> },
+              { path: '/documents/saved',     element: <SavedDocumentsPage /> },
+              { path: '/documents/mine',      element: <MyUploadedDocumentsPage /> },
             ],
           },
         ],

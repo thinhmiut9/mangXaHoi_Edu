@@ -23,6 +23,8 @@ export interface Post {
   isShared?: boolean
   isPinned?: boolean
   pinnedAt?: string
+  sharedFromPostId?: string
+  originalPost?: Post
   createdAt: string
   updatedAt: string
 }
@@ -124,6 +126,8 @@ function normalizePost(raw: any): Post {
     isShared: !!raw.isShared,
     isPinned: !!raw.isPinned,
     pinnedAt: raw.pinnedAt ? toIsoString(raw.pinnedAt) : undefined,
+    sharedFromPostId: raw.sharedFromPostId ?? undefined,
+    originalPost: raw.originalPost ? normalizePost(raw.originalPost) : undefined,
     createdAt: toIsoString(raw.createdAt),
     updatedAt: toIsoString(raw.updatedAt),
   }
@@ -215,8 +219,8 @@ export const postsApi = {
       pinned: !!r.data.data?.pinned,
     })),
 
-  sharePost: (id: string) =>
-    apiClient.post<ApiResponse<{ shared: boolean; sharesCount: unknown }>>(`/posts/${id}/share`).then(r => ({
+  sharePost: (id: string, data?: { caption?: string; privacy?: string }) =>
+    apiClient.post<ApiResponse<{ shared: boolean; sharesCount: unknown }>>(`/posts/${id}/share`, data ?? {}).then(r => ({
       shared: !!r.data.data?.shared,
       sharesCount: toNumber(r.data.data?.sharesCount),
     })),
@@ -252,6 +256,9 @@ export const postsApi = {
   },
 
   deleteComment: (commentId: string) => apiClient.delete(`/comments/${commentId}`),
+
+  updateComment: (commentId: string, content: string) =>
+    apiClient.put<ApiResponse<any>>(`/comments/${commentId}`, { content }).then(r => normalizeComment(r.data.data)),
 
   toggleCommentLike: (commentId: string) =>
     apiClient

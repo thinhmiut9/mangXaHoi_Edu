@@ -63,13 +63,18 @@ export const chatRepository = {
       { userId, targetId }
     )
 
+    // Check if they are friends to set requestStatus
+    const areFriends = await chatRepository.areFriends(userId, targetId)
+    const requestStatus = areFriends ? 'ACCEPTED' : 'PENDING'
+
     if (existing?.c?.properties?.conversationId) {
-      // Normalize legacy data so future lookups can match by directKey as well.
       await runQuery(
         `MATCH (u:User {userId: $userId}), (t:User {userId: $targetId}), (c:Conversation {conversationId: $conversationId})
          SET c.directKey = coalesce(c.directKey, $directKey),
              c.updatedAt = coalesce(c.updatedAt, $now),
-             c.lastMessageAt = coalesce(c.lastMessageAt, $now)
+             c.lastMessageAt = coalesce(c.lastMessageAt, $now),
+             c.requestStatus = CASE WHEN $areFriends THEN 'ACCEPTED' ELSE coalesce(c.requestStatus, 'PENDING') END,
+             c.requesterId = coalesce(c.requesterId, $userId)
          MERGE (u)-[:PARTICIPATES_IN]->(c)
          MERGE (t)-[:PARTICIPATES_IN]->(c)`,
         {
@@ -78,19 +83,21 @@ export const chatRepository = {
           conversationId: existing.c.properties.conversationId,
           directKey,
           now,
+          areFriends,
         }
       )
-      return existing.c.properties
+      return { ...existing.c.properties, requestStatus: areFriends ? 'ACCEPTED' : (existing.c.properties as any).requestStatus ?? 'PENDING' }
     }
 
     const created = await runQueryOne<{ c: { properties: Conversation } }>(
       `MATCH (u:User {userId: $userId}), (t:User {userId: $targetId})
        MERGE (c:Conversation {type: 'DIRECT', directKey: $directKey})
-       ON CREATE SET c.conversationId = $newId, c.createdAt = $now, c.updatedAt = $now, c.lastMessageAt = $now
+       ON CREATE SET c.conversationId = $newId, c.createdAt = $now, c.updatedAt = $now,
+                     c.lastMessageAt = $now, c.requestStatus = $requestStatus, c.requesterId = $userId
        MERGE (u)-[:PARTICIPATES_IN]->(c)
        MERGE (t)-[:PARTICIPATES_IN]->(c)
        RETURN c`,
-      { userId, targetId, directKey, newId: uuidv4(), now }
+      { userId, targetId, directKey, newId: uuidv4(), now, requestStatus }
     )
 
     return created!.c.properties

@@ -1,5 +1,5 @@
-﻿import { useState, useEffect, useRef, useMemo } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { useNavigate, useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { chatApi, Conversation, Message } from '@/api/index'
 import { useAuthStore } from '@/store/authStore'
@@ -25,10 +25,41 @@ import { notificationsApi } from '@/api/index'
 import { useNotificationStore } from '@/store/notificationStore'
 import { friendsApi } from '@/api/users'
 import { Modal } from '@/components/ui/Modal'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/Toast'
 import { extractError } from '@/api/client'
 
 type CallStatus = 'idle' | 'calling' | 'incoming' | 'connecting' | 'in-call'
+
+/** Renders message text with clickable links */
+function renderMessageContent(content: string, isOwn: boolean) {
+  const URL_REGEX = /(https?:\/\/[^\s]+)/g
+  const parts = content.split(URL_REGEX)
+  const origin = window.location.origin
+
+  return parts.map((part, i) => {
+    if (!part.startsWith('http://') && !part.startsWith('https://')) {
+      return <span key={i}>{part}</span>
+    }
+    const isInternal = part.startsWith(origin)
+    const linkClass = `underline break-all ${
+      isOwn ? 'text-blue-100 hover:text-white' : 'text-blue-600 hover:text-blue-800'
+    }`
+    if (isInternal) {
+      const internalPath = part.slice(origin.length) || '/'
+      return (
+        <Link key={i} to={internalPath} className={linkClass}>
+          {part}
+        </Link>
+      )
+    }
+    return (
+      <a key={i} href={part} target="_blank" rel="noopener noreferrer" className={linkClass}>
+        {part}
+      </a>
+    )
+  })
+}
 
 interface IncomingCallState {
   fromUserId: string
@@ -895,7 +926,7 @@ export default function ChatPage() {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-white/50">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-slate-50/70">
             {msgsLoading ? <div className="flex justify-center py-10"><Spinner /></div> : msgsError ? (
               <div className="py-8 px-2 space-y-3 text-center">
                 <p className="text-sm text-gray-600">Không tải được nội dung cuộc trò chuyện.</p>
@@ -920,7 +951,7 @@ export default function ChatPage() {
                              ? 'bg-primary-600 text-white rounded-br-sm'
                              : 'bg-gray-100 text-gray-900 rounded-bl-sm'
                          )}>
-                           {msg.content}
+                           <span className="whitespace-pre-wrap break-words">{renderMessageContent(msg.content, isOwn)}</span>
                          </div>
                          <span className="text-[11px] text-gray-400 mt-1 font-medium px-1">
                            {new Date(msg.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
@@ -933,6 +964,44 @@ export default function ChatPage() {
             )}
             <div ref={messagesEndRef} />
           </div>
+
+          {/* Message Request Banner */}
+          {(() => {
+            const activeConv = conversations?.find(c => c.id === activeConvId)
+            const isPending = activeConv?.requestStatus === 'PENDING'
+            const isRequester = activeConv?.requesterId === user?.id
+            if (!isPending || isRequester) return null
+            return (
+              <div className="px-4 py-3 bg-amber-50 border-t border-amber-200 flex flex-col gap-2">
+                <p className="text-[13px] text-amber-800 font-medium text-center">
+                  Người này chưa có trong danh sách bạn bè của bạn. Bạn có muốn nhận tin nhắn từ họ không?
+                </p>
+                <div className="flex gap-2 justify-center">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await chatApi.acceptMessageRequest(activeConvId!)
+                      queryClient.invalidateQueries({ queryKey: ['conversations'] })
+                    }}
+                    className="px-4 py-1.5 rounded-full bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition-colors"
+                  >
+                    Chấp nhận
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      chatApi.deleteConversation(activeConvId!)
+                      setActiveConvId(undefined)
+                      queryClient.invalidateQueries({ queryKey: ['conversations'] })
+                    }}
+                    className="px-4 py-1.5 rounded-full bg-white border border-red-300 text-red-600 text-sm font-semibold hover:bg-red-50 transition-colors"
+                  >
+                    Từ chối &amp; xóa
+                  </button>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Input Area */}
           <div className="p-4 sm:p-5 bg-white border-t border-gray-100 z-10">
@@ -1151,49 +1220,30 @@ export default function ChatPage() {
         </div>
       </Modal>
 
-      <Modal
+      <ConfirmDialog
         open={!!confirmDeleteConv}
         onClose={() => {
           if (deleteConversationMutation.isPending) return
           setConfirmDeleteConv(null)
         }}
+        onConfirm={() => {
+          if (!confirmDeleteConv?.id) return
+          deleteConversationMutation.mutate(confirmDeleteConv.id, {
+            onSettled: () => setConfirmDeleteConv(null),
+          })
+        }}
         title="Xóa cuộc trò chuyện"
-        size="sm"
         closeOnOverlay={!deleteConversationMutation.isPending}
-        footer={
-          <>
-            <Button
-              variant="ghost"
-              onClick={() => setConfirmDeleteConv(null)}
-              disabled={deleteConversationMutation.isPending}
-            >
-              Hủy
-            </Button>
-            <Button
-              variant="danger"
-              loading={deleteConversationMutation.isPending}
-              onClick={() => {
-                if (!confirmDeleteConv?.id) return
-                deleteConversationMutation.mutate(confirmDeleteConv.id, {
-                  onSettled: () => setConfirmDeleteConv(null),
-                })
-              }}
-            >
-              Xóa phía tôi
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-2">
-          <p className="text-[15px] text-gray-700 leading-relaxed">
-            Bạn có chắc muốn xóa cuộc trò chuyện với{' '}
-            <span className="font-semibold text-gray-900">{confirmDeleteConv?.name}</span> ở phía bạn?
-          </p>
-          <p className="text-[13px] text-gray-500">
-            Người còn lại vẫn giữ cuộc trò chuyện và tin nhắn của họ.
-          </p>
-        </div>
-      </Modal>
+        description={(
+          <span>
+            Bạn có chắc muốn xóa cuộc trò chuyện với <b>{confirmDeleteConv?.name}</b> ở phía bạn? Người còn lại vẫn giữ cuộc trò chuyện và tin nhắn của họ.
+          </span>
+        )}
+        confirmText="Xóa phía tôi"
+        cancelText="Hủy"
+        tone="danger"
+        loading={deleteConversationMutation.isPending}
+      />
 
       <Modal
         open={!!incomingCall}

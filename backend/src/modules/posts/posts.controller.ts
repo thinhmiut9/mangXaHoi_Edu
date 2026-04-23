@@ -1,4 +1,4 @@
-﻿import { Request, Response, NextFunction } from 'express'
+import { Request, Response, NextFunction } from 'express'
 import { postsService } from './posts.service'
 import { sendSuccess } from '../../utils/response'
 
@@ -62,7 +62,8 @@ export const postsController = {
 
   async sharePost(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await postsService.sharePost(String(req.params.id), req.user!.userId)
+      const { caption, visibility } = req.body ?? {}
+      const result = await postsService.sharePost(String(req.params.id), req.user!.userId, caption, visibility)
       sendSuccess(res, result)
     } catch (err) { next(err) }
   },
