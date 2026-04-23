@@ -125,6 +125,9 @@ export interface Group {
 export interface Conversation {
   conversationId: string
   type: 'DIRECT' | 'GROUP'
+  name?: string
+  avatarUrl?: string
+  creatorId?: string
   directKey?: string
   requestStatus?: 'PENDING' | 'ACCEPTED'
   requesterId?: string
@@ -139,13 +142,19 @@ export interface Conversation {
 // ────────────────────────────────────────────
 // Message (Node: Message)
 // ────────────────────────────────────────────
+export type MessageType = 'TEXT' | 'IMAGE' | 'VIDEO' | 'FILE' | 'LINK'
+
 export interface Message {
   messageId: string
   content: string
-  type: 'TEXT' | 'IMAGE'
-  mediaUrl?: string
+  type: MessageType
+  mediaUrl?: string       // URL tới Cloudinary (image/video) hoặc CDN (file)
+  fileName?: string       // Tên file gốc (dành cho FILE)
+  fileSize?: number       // Kích thước byte (dành cho FILE/VIDEO)
+  mimeType?: string       // VD: image/png, video/mp4, application/pdf
+  thumbnailUrl?: string   // Ảnh thumbnail cho VIDEO
   sender?: UserPublic
-  conversationId?: string   // resolved from relationship
+  conversationId?: string // resolved from relationship
   createdAt: string
 }
 

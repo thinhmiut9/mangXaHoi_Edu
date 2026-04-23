@@ -17,19 +17,22 @@ export const chatRepository = {
   async getConversations(userId: string): Promise<Conversation[]> {
     const results = await runQuery<{
       c: { properties: Conversation }
-      lastMessage: { properties: Message } | null
+      lastMessage: any
       unread: number
       participants: Array<Record<string, unknown>>
     }>(
       `MATCH (u:User {userId: $userId})-[:PARTICIPATES_IN]-(c:Conversation)
-       OPTIONAL MATCH (c)-[:PARTICIPATES_IN]-(other:User) WHERE other.userId <> $userId
+       OPTIONAL MATCH (c)-[:PARTICIPATES_IN]-(other:User)
+       WHERE c.type = 'GROUP' OR other.userId <> $userId
        WITH u, c, collect(other {
          .userId, .email, .displayName, .avatarUrl, .coverUrl, .location,
          .role, .status, .profileVisibility, .createdAt, .lastOnlineAt
        }) AS participants
        OPTIONAL MATCH (lm:Message)-[:IN_CONVERSATION]->(c)
        WITH u, c, participants, lm ORDER BY lm.createdAt DESC
-       WITH u, c, participants, head(collect(lm)) AS lastMessage
+       WITH u, c, participants, head(collect(lm)) AS lastMessageNode
+       OPTIONAL MATCH (lastMessageNode)<-[:SENT]-(lmSender:User)
+       WITH u, c, participants, CASE WHEN lastMessageNode IS NOT NULL THEN lastMessageNode { .*, senderId: lmSender.userId } ELSE null END AS lastMessage
        OPTIONAL MATCH (u)-[hidden:HIDDEN_CONVERSATION]->(c)
        WITH u, c, participants, lastMessage, coalesce(hidden.hiddenAt, hidden.at, '') AS hiddenAt
        WHERE hiddenAt = '' OR (c.lastMessageAt IS NOT NULL AND c.lastMessageAt > hiddenAt)
@@ -47,7 +50,7 @@ export const chatRepository = {
       ...r.c.properties,
       participants: (r.participants ?? []) as unknown as UserPublic[],
       unreadCount: r.unread,
-      lastMessage: r.lastMessage?.properties,
+      lastMessage: r.lastMessage,
     }))
   },
 
@@ -124,6 +127,26 @@ export const chatRepository = {
     })).reverse()
   },
 
+  async getMediaMessages(conversationRef: string, userId: string): Promise<Message[]> {
+    const results = await runQuery<{ m: { properties: Message }; sender: Record<string, unknown> }>(
+      `MATCH (me:User {userId: $userId})-[:PARTICIPATES_IN]-(c:Conversation)
+       WHERE c.conversationId = $conversationRef OR c.directKey = $conversationRef
+       OPTIONAL MATCH (me)-[hidden:HIDDEN_CONVERSATION]->(c)
+       WITH c, coalesce(hidden.hiddenAt, hidden.at, '') AS hiddenAt
+       MATCH (c)<-[:IN_CONVERSATION]-(m:Message)<-[:SENT]-(u:User)
+       WHERE m.type IN ['IMAGE', 'VIDEO', 'FILE', 'LINK']
+         AND (hiddenAt = '' OR m.createdAt > hiddenAt)
+       RETURN m, u { .userId, .displayName, .avatarUrl } AS sender
+       ORDER BY m.createdAt DESC
+       LIMIT 100`,
+      { conversationRef, userId }
+    )
+    return results.map(r => ({
+      ...r.m.properties,
+      sender: r.sender as unknown as UserPublic,
+    }))
+  },
+
   async createMessage(data: {
     messageId: string
     conversationId: string
@@ -131,6 +154,10 @@ export const chatRepository = {
     content: string
     type?: string
     mediaUrl?: string
+    fileName?: string
+    fileSize?: number
+    mimeType?: string
+    thumbnailUrl?: string
   }): Promise<Message> {
     const now = new Date().toISOString()
     const result = await runQueryOne<{ m: { properties: Message } }>(
@@ -140,13 +167,28 @@ export const chatRepository = {
        CREATE (m:Message {
          messageId: $messageId,
          conversationId: $conversationId,
-         content: $content, type: $type, mediaUrl: $mediaUrl,
+         content: $content,
+         type: $type,
+         mediaUrl: $mediaUrl,
+         fileName: $fileName,
+         fileSize: $fileSize,
+         mimeType: $mimeType,
+         thumbnailUrl: $thumbnailUrl,
          createdAt: $now
        })<-[:SENT {createdAt: $now}]-(u)
        CREATE (m)-[:IN_CONVERSATION]->(c)
        SET c.updatedAt = $now, c.lastMessageAt = $now
        RETURN m`,
-      { ...data, type: data.type ?? 'TEXT', mediaUrl: data.mediaUrl ?? null, now }
+      {
+        ...data,
+        type: data.type ?? 'TEXT',
+        mediaUrl: data.mediaUrl ?? null,
+        fileName: data.fileName ?? null,
+        fileSize: data.fileSize ?? null,
+        mimeType: data.mimeType ?? null,
+        thumbnailUrl: data.thumbnailUrl ?? null,
+        now
+      }
     )
     return result!.m.properties
   },
@@ -226,6 +268,60 @@ export const chatRepository = {
        MERGE (u)-[hidden:HIDDEN_CONVERSATION]->(c)
        SET hidden.hiddenAt = $now`,
       { conversationRef, userId, now: new Date().toISOString() }
+    )
+  },
+
+  async createGroupConversation(creatorId: string, name: string, participantIds: string[], avatarUrl?: string): Promise<Conversation> {
+    const now = new Date().toISOString()
+    const conversationId = uuidv4()
+    const allIds = Array.from(new Set([creatorId, ...participantIds]))
+
+    const result = await runQueryOne<{ c: { properties: Conversation } }>(
+      `CREATE (c:Conversation {
+         conversationId: $conversationId,
+         type: 'GROUP',
+         name: $name,
+         creatorId: $creatorId,
+         avatarUrl: $avatarUrl,
+         createdAt: $now,
+         updatedAt: $now,
+         lastMessageAt: $now
+       })
+       WITH c
+       UNWIND $allIds AS uid
+       MATCH (u:User)
+       WHERE replace(trim(coalesce(u.userId, '')), ' ', '-') = uid
+       MERGE (u)-[:PARTICIPATES_IN]->(c)
+       WITH c
+       RETURN DISTINCT c`,
+      { conversationId, name, creatorId, avatarUrl: avatarUrl ?? null, now, allIds }
+    )
+    return result!.c.properties
+  },
+
+  async getGroupInfo(conversationRef: string): Promise<{ name: string; avatarUrl?: string; creatorId: string } | null> {
+    const result = await runQueryOne<{ name: string; avatarUrl: string | null; creatorId: string }>(
+      `MATCH (c:Conversation)
+       WHERE c.conversationId = $conversationRef
+         AND c.type = 'GROUP'
+       RETURN c.name AS name, c.avatarUrl AS avatarUrl, c.creatorId AS creatorId`,
+      { conversationRef }
+    )
+    if (!result) return null
+    return {
+      name: result.name,
+      avatarUrl: result.avatarUrl ?? undefined,
+      creatorId: result.creatorId,
+    }
+  },
+
+  async updateGroupInfo(conversationRef: string, data: { name?: string; avatarUrl?: string }): Promise<void> {
+    await runQuery(
+      `MATCH (c:Conversation {conversationId: $conversationRef, type: 'GROUP'})
+       SET c.name = coalesce($name, c.name),
+           c.avatarUrl = coalesce($avatarUrl, c.avatarUrl),
+           c.updatedAt = $now`,
+      { conversationRef, name: data.name ?? null, avatarUrl: data.avatarUrl ?? null, now: new Date().toISOString() }
     )
   },
 }

@@ -704,7 +704,7 @@ function StoryViewer({
             className="relative bg-black rounded-2xl overflow-hidden shadow-2xl flex-shrink-0 transition-all duration-300"
             style={{
               height: 'min(calc(100vh - 48px), 100vh)',
-              aspectRatio: activeStory.type === 'VIDEO' ? '16/9' : '9/16',
+              aspectRatio: '9/16',
             }}
           >
             {/* Progress bars */}
@@ -754,9 +754,9 @@ function StoryViewer({
 
             {/* Media */}
             {activeStory.type === 'VIDEO' ? (
-              <video key={activeStory.id} src={activeStory.mediaUrl} className="w-full h-full object-cover" autoPlay playsInline onEnded={goNext} />
+              <video key={activeStory.id} src={activeStory.mediaUrl} className="w-full h-full object-contain" autoPlay playsInline onEnded={goNext} />
             ) : (
-              <img key={activeStory.id} src={activeStory.mediaUrl} alt="Story" className="w-full h-full object-cover" />
+              <img key={activeStory.id} src={activeStory.mediaUrl} alt="Story" className="w-full h-full object-contain" />
             )}
 
             {/* Caption */}
@@ -887,9 +887,9 @@ function StoryViewer({
 
           {/* Media */}
           {activeStory.type === 'VIDEO' ? (
-            <video key={activeStory.id} src={activeStory.mediaUrl} className="w-full h-full object-cover" autoPlay playsInline onEnded={goNext} />
+            <video key={activeStory.id} src={activeStory.mediaUrl} className="w-full h-full object-contain" autoPlay playsInline onEnded={goNext} />
           ) : (
-            <img key={activeStory.id} src={activeStory.mediaUrl} alt="Story" className="w-full h-full object-cover" />
+            <img key={activeStory.id} src={activeStory.mediaUrl} alt="Story" className="w-full h-full object-contain" />
           )}
 
           {/* Caption */}

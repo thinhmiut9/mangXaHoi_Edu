@@ -49,9 +49,19 @@ function FloatingChatWidget() {
   const [open, setOpen] = useState(false)
   const [activeConv, setActiveConv] = useState<Conversation | null>(null)
   const [msgText, setMsgText] = useState('')
+  const [bubblePosition, setBubblePosition] = useState({ x: 0, y: 0 })
+  const [isBubbleDragging, setIsBubbleDragging] = useState(false)
   const popupRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const dragRef = useRef<{
+    pointerId: number
+    startX: number
+    startY: number
+    originX: number
+    originY: number
+    moved: boolean
+  } | null>(null)
 
   // ── Conversation list ──
   const { data: conversations, isLoading: convsLoading } = useQuery({
@@ -144,6 +154,63 @@ function FloatingChatWidget() {
     setActiveConv(conv)
   }
 
+  const toggleChat = () => {
+    setOpen(v => !v)
+    if (!open) setActiveConv(null)
+  }
+
+  const handleBubblePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!window.matchMedia('(max-width: 767px)').matches) return
+    setIsBubbleDragging(true)
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      originX: bubblePosition.x,
+      originY: bubblePosition.y,
+      moved: false,
+    }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  const handleBubblePointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== e.pointerId) return
+
+    const dx = e.clientX - drag.startX
+    const dy = e.clientY - drag.startY
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) drag.moved = true
+
+    const maxX = Math.max(0, window.innerWidth - 72)
+    const maxY = Math.max(0, window.innerHeight - 88)
+    setBubblePosition({
+      x: Math.min(maxX, Math.max(-window.innerWidth + 72, drag.originX + dx)),
+      y: Math.min(24, Math.max(-maxY, drag.originY + dy)),
+    })
+  }
+
+  const handleBubblePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current
+    dragRef.current = null
+    setIsBubbleDragging(false)
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      // Pointer capture may already be released by the browser.
+    }
+    if (!drag?.moved) {
+      toggleChat()
+      return
+    }
+
+    const currentX = drag.originX + (e.clientX - drag.startX)
+    const bubbleCenterX = window.innerWidth - 20 + currentX - 24
+    const snapX = bubbleCenterX < window.innerWidth / 2
+      ? -window.innerWidth + 72
+      : 0
+    setBubblePosition(prev => ({ ...prev, x: snapX }))
+  }
+
   const sorted = [...(conversations ?? [])].sort((a, b) => {
     const ta = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : 0
     const tb = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : 0
@@ -153,7 +220,14 @@ function FloatingChatWidget() {
   const otherParticipant = activeConv?.participants.find(p => p.id !== user?.id)
 
   return (
-    <div ref={popupRef} className='fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2'>
+    <div
+      ref={popupRef}
+      className='fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2'
+      style={{
+        transform: `translate(${bubblePosition.x}px, ${bubblePosition.y}px)`,
+        transition: isBubbleDragging ? 'none' : 'transform 260ms cubic-bezier(0.22, 1, 0.36, 1)',
+      }}
+    >
 
       {/* ════════════════════════════════════
           POPUP PANEL
@@ -297,43 +371,61 @@ function FloatingChatWidget() {
                   <p className='text-sm text-slate-400'>Không tìm thấy tin nhắn.</p>
                 </div>
               ) : (
-                <div className='py-2'>
+                <div className='space-y-2 bg-slate-50/70 p-3'>
                   {sorted.map((conv: Conversation) => {
-                    const other = conv.participants.find(p => p.id !== user?.id)
+                    const other = conv.isGroup
+                      ? {
+                          id: conv.id,
+                          displayName: conv.name || conv.participants.map(p => p.displayName).join(', ') || 'Nhóm chat',
+                          avatar: conv.avatarUrl,
+                        }
+                      : conv.participants.find(p => p.id !== user?.id)
+                    const convName = conv.isGroup
+                      ? (conv.name || conv.participants.map(p => p.displayName).join(', ') || 'Nhóm chat')
+                      : (other?.displayName ?? '')
+                    const convAvatar = conv.isGroup ? conv.avatarUrl : other?.avatar
                     const isUnread = conv.unreadCount > 0
+                    const lastSender = conv.participants.find(p => p.id === conv.lastMessage?.senderId)
+                    const previewPrefix = conv.lastMessage?.senderId === user?.id
+                      ? 'Bạn: '
+                      : conv.isGroup && lastSender?.displayName
+                        ? `${lastSender.displayName.split(' ').slice(-1)[0]}: `
+                        : ''
                     return (
                       <button
                         key={conv.id}
                         type='button'
                         onClick={() => handleOpenConv(conv)}
                         className={cn(
-                          'w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left',
-                          isUnread && 'bg-blue-50/60 hover:bg-blue-50'
+                          'w-full flex items-center gap-3 rounded-2xl border p-3 text-left transition-all duration-150',
+                          isUnread
+                            ? 'border-primary-100 bg-blue-50/80 shadow-sm hover:bg-blue-50 hover:shadow-md'
+                            : 'border-transparent bg-white shadow-sm hover:bg-gray-50 hover:shadow-md'
                         )}
                       >
                         <div className='relative flex-shrink-0'>
-                          <Avatar src={other?.avatar} name={other?.displayName ?? ''} size='md' />
+                          <Avatar src={convAvatar} name={convName} size='lg' />
                           {isUnread && (
-                            <span className='absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-primary-500 border-2 border-white' />
+                            <span className='absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-primary-500' />
                           )}
                         </div>
                         <div className='flex-1 min-w-0'>
-                          <div className='flex items-baseline justify-between gap-1'>
-                            <p className={cn('text-[14px] truncate', isUnread ? 'font-bold text-slate-900' : 'font-semibold text-slate-700')}>
+                          <div className='flex items-center justify-between gap-2'>
+                            <p className={cn('truncate text-[15px]', isUnread ? 'font-bold text-slate-900' : 'font-bold text-slate-800')}>
                               {other?.displayName ?? conv.name ?? 'Nhóm chat'}
                             </p>
                             {conv.lastMessage && (
-                              <span className='text-[11px] text-slate-400 flex-shrink-0'>{timeAgo(conv.lastMessage.createdAt)}</span>
+                              <span className={cn('flex-shrink-0 text-[12px] font-semibold', isUnread ? 'text-primary-600' : 'text-slate-400')}>{timeAgo(conv.lastMessage.createdAt)}</span>
                             )}
                           </div>
                           {conv.lastMessage && (
-                            <p className={cn('text-[12px] truncate', isUnread ? 'font-semibold text-slate-700' : 'text-slate-400')}>
-                              {conv.lastMessage.content}
+                            <p className={cn('mt-0.5 truncate text-[13px]', isUnread ? 'font-semibold text-slate-700' : 'font-medium text-slate-400')}>
+                              {previewPrefix}{conv.lastMessage.content}
                             </p>
                           )}
                         </div>
                         {conv.unreadCount > 0 && (
-                          <span className='flex-shrink-0 min-w-[20px] h-5 flex items-center justify-center rounded-full bg-primary-500 text-white text-[10px] font-bold px-1.5'>
+                          <span className='flex h-5 min-w-[20px] flex-shrink-0 items-center justify-center rounded-full bg-primary-600 px-1.5 text-[10px] font-bold text-white shadow-sm'>
                             {conv.unreadCount > 99 ? '99+' : conv.unreadCount}
                           </span>
                         )}
@@ -352,9 +444,16 @@ function FloatingChatWidget() {
           ════════════════════════════════════ */}
       <button
         type='button'
-        onClick={() => { setOpen(v => !v); if (!open) setActiveConv(null) }}
+        onClick={(e) => {
+          if (window.matchMedia('(max-width: 767px)').matches) e.preventDefault()
+          else toggleChat()
+        }}
+        onPointerDown={handleBubblePointerDown}
+        onPointerMove={handleBubblePointerMove}
+        onPointerUp={handleBubblePointerUp}
+        onPointerCancel={() => { dragRef.current = null; setIsBubbleDragging(false) }}
         className={cn(
-          'flex items-center gap-2.5 rounded-full bg-white border border-slate-200 shadow-[0_4px_24px_rgba(0,0,0,0.12)] px-4 py-3 text-slate-700 font-semibold text-[14px]',
+          'flex items-center gap-2.5 rounded-full bg-white border border-slate-200 shadow-[0_4px_24px_rgba(0,0,0,0.12)] p-3 text-slate-700 font-semibold text-[14px] touch-none md:px-4',
           'hover:shadow-[0_8px_32px_rgba(0,0,0,0.18)] hover:bg-slate-50 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 select-none',
           open && 'bg-slate-50'
         )}
@@ -370,9 +469,9 @@ function FloatingChatWidget() {
             </span>
           )}
         </span>
-        <span>Tin nhắn</span>
+        <span className='hidden md:inline'>Tin nhắn</span>
         {!!unreadMessageCount && !open && (
-          <span className='flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[11px] font-bold text-white'>
+          <span className='hidden h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[11px] font-bold text-white md:flex'>
             {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
           </span>
         )}

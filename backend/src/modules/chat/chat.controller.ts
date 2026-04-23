@@ -24,7 +24,13 @@ export const chatController = {
   },
   async sendMessage(req: Request, res: Response, next: NextFunction) {
     try {
-      const message = await chatService.sendMessage(String(req.params.id), req.user!.userId, req.body.content)
+      const { content, type, mediaUrl, fileName, fileSize, mimeType, thumbnailUrl } = req.body
+      const message = await chatService.sendMessage(
+        String(req.params.id),
+        req.user!.userId,
+        content,
+        type && type !== 'TEXT' ? { type, mediaUrl, fileName, fileSize, mimeType, thumbnailUrl } : undefined
+      )
       sendSuccess(res, message, 'Gửi tin nhắn thành công', 201)
     } catch (err) { next(err) }
   },
@@ -42,6 +48,13 @@ export const chatController = {
     } catch (err) { next(err) }
   },
 
+  async getMediaMessages(req: Request, res: Response, next: NextFunction) {
+    try {
+      const messages = await chatService.getMediaMessages(String(req.params.id), req.user!.userId)
+      sendSuccess(res, messages)
+    } catch (err) { next(err) }
+  },
+
   async acceptMessageRequest(req: Request, res: Response, next: NextFunction) {
     try {
       await chatService.acceptMessageRequest(String(req.params.id), req.user!.userId)
@@ -53,6 +66,28 @@ export const chatController = {
     try {
       const meta = await chatService.getConversationMeta(String(req.params.id), req.user!.userId)
       sendSuccess(res, meta)
+    } catch (err) { next(err) }
+  },
+
+  async createGroupConversation(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { name, participantIds, avatarUrl } = req.body as { name: string; participantIds: string[]; avatarUrl?: string }
+      const conversation = await chatService.createGroupConversation(req.user!.userId, name, participantIds, avatarUrl)
+      sendSuccess(res, conversation, 'Tạo nhóm thành công', 201)
+    } catch (err) { next(err) }
+  },
+
+  async getGroupInfo(req: Request, res: Response, next: NextFunction) {
+    try {
+      const info = await chatService.getGroupInfo(String(req.params.id), req.user!.userId)
+      sendSuccess(res, info)
+    } catch (err) { next(err) }
+  },
+
+  async updateGroupInfo(req: Request, res: Response, next: NextFunction) {
+    try {
+      await chatService.updateGroupInfo(String(req.params.id), req.user!.userId, req.body)
+      sendSuccess(res, null, 'Đã cập nhật thông tin nhóm')
     } catch (err) { next(err) }
   },
 }

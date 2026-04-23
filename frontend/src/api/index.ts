@@ -34,13 +34,17 @@ export interface Conversation {
   id: string
   isGroup: boolean
   name?: string
+  avatarUrl?: string
+  creatorId?: string
   participants: Array<{ id: string; displayName: string; avatar?: string }>
-  lastMessage?: { content: string; createdAt: string }
+  lastMessage?: { content: string; createdAt: string; senderId?: string; type?: string }
   unreadCount: number
   updatedAt: string
   requestStatus?: 'PENDING' | 'ACCEPTED'
   requesterId?: string
 }
+
+export type MessageType = 'TEXT' | 'IMAGE' | 'VIDEO' | 'FILE' | 'LINK'
 
 export interface Message {
   id: string
@@ -48,7 +52,12 @@ export interface Message {
   senderId: string
   sender?: { displayName: string; avatar?: string }
   content: string
-  type: string
+  type: MessageType
+  mediaUrl?: string       // URL Cloudinary
+  fileName?: string       // Tên file (dành cho FILE)
+  fileSize?: number       // Byte
+  mimeType?: string       // VD: image/png, video/mp4, application/pdf
+  thumbnailUrl?: string   // Thumbnail cho VIDEO
   readBy: string[]
   createdAt: string
 }
@@ -127,16 +136,25 @@ function normalizeConversation(raw: any): Conversation {
     id: raw.conversationId ?? raw.id,
     isGroup: raw.type === 'GROUP' || !!raw.isGroup,
     name: raw.name,
+    avatarUrl: raw.avatarUrl,
+    creatorId: raw.creatorId,
     participants: (raw.participants ?? []).map((p: any) => ({
       id: p.userId ?? p.id ?? '',
       displayName: p.displayName ?? '',
       avatar: p.avatarUrl ?? p.avatar,
     })),
     lastMessage: raw.lastMessage
-      ? { content: raw.lastMessage.content ?? '', createdAt: toIsoString(raw.lastMessage.createdAt) }
+      ? { 
+          content: raw.lastMessage.content ?? '', 
+          createdAt: toIsoString(raw.lastMessage.createdAt),
+          senderId: raw.lastMessage.senderId,
+          type: raw.lastMessage.type,
+        }
       : undefined,
     unreadCount: toNumber(raw.unreadCount),
     updatedAt: toIsoString(raw.updatedAt),
+    requestStatus: raw.requestStatus,
+    requesterId: raw.requesterId,
   }
 }
 
@@ -150,6 +168,11 @@ function normalizeMessage(raw: any): Message {
       : undefined,
     content: raw.content ?? '',
     type: raw.type ?? 'TEXT',
+    mediaUrl: raw.mediaUrl ?? undefined,
+    fileName: raw.fileName ?? undefined,
+    fileSize: raw.fileSize ?? undefined,
+    mimeType: raw.mimeType ?? undefined,
+    thumbnailUrl: raw.thumbnailUrl ?? undefined,
     readBy: raw.readBy ?? [],
     createdAt: toIsoString(raw.createdAt),
   }
@@ -211,10 +234,21 @@ export const chatApi = {
     apiClient.get<ApiResponse<any[]>>('/chat/conversations').then(r => (r.data.data ?? []).map(normalizeConversation)),
   getOrCreateConversation: (targetId: string) =>
     apiClient.post<ApiResponse<any>>('/chat/conversations', { targetId }).then(r => normalizeConversation(r.data.data)),
+  createGroupConversation: (name: string, participantIds: string[], avatarUrl?: string) =>
+    apiClient.post<ApiResponse<any>>('/chat/conversations/group', { name, participantIds, avatarUrl }).then(r => normalizeConversation(r.data.data)),
   getMessages: (conversationId: string, page = 1) =>
     apiClient.get<ApiResponse<any[]>>(`/chat/conversations/${conversationId}/messages`, { params: { page } }).then(r => (r.data.data ?? []).map(normalizeMessage)),
-  sendMessage: (conversationId: string, content: string) =>
-    apiClient.post<ApiResponse<any>>(`/chat/conversations/${conversationId}/messages`, { content }).then(r => normalizeMessage(r.data.data)),
+  getMediaMessages: (conversationId: string) =>
+    apiClient.get<ApiResponse<any[]>>(`/chat/conversations/${conversationId}/media`).then(r => (r.data.data ?? []).map(normalizeMessage)),
+  sendMessage: (conversationId: string, content: string, media?: {
+    type?: MessageType
+    mediaUrl?: string
+    fileName?: string
+    fileSize?: number
+    mimeType?: string
+    thumbnailUrl?: string
+  }) =>
+    apiClient.post<ApiResponse<any>>(`/chat/conversations/${conversationId}/messages`, { content, ...media }).then(r => normalizeMessage(r.data.data)),
   markConversationRead: (conversationId: string) =>
     apiClient.put(`/chat/conversations/${conversationId}/read`),
   deleteConversation: (conversationId: string) =>
@@ -223,6 +257,10 @@ export const chatApi = {
     apiClient.put(`/chat/conversations/${conversationId}/accept`),
   getConversationMeta: (conversationId: string): Promise<{ requestStatus: string; requesterId: string | null }> =>
     apiClient.get<ApiResponse<any>>(`/chat/conversations/${conversationId}/meta`).then(r => r.data.data ?? { requestStatus: 'ACCEPTED', requesterId: null }),
+  getGroupInfo: (conversationId: string) =>
+    apiClient.get<ApiResponse<any>>(`/chat/conversations/${conversationId}/group-info`).then(r => r.data.data as { name: string; avatarUrl?: string; creatorId: string } | null),
+  updateGroupInfo: (conversationId: string, data: { name?: string; avatarUrl?: string }) =>
+    apiClient.put(`/chat/conversations/${conversationId}/group-info`, data),
 }
 
 export const reportsApi = {
