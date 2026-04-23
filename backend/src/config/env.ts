@@ -38,7 +38,7 @@ const envSchema = z.object({
   RESET_PASSWORD_URL: z.string().url().default('http://localhost:5173/reset-password'),
 
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(900000),
-  RATE_LIMIT_MAX: z.coerce.number().default(100),
+  RATE_LIMIT_MAX: z.coerce.number().default(300),
 })
 
 const parsed = envSchema.safeParse(process.env)
