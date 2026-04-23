@@ -12,8 +12,8 @@ import { Button } from '@/components/ui/Button'
 import { extractError } from '@/api/client'
 
 const schema = z.object({
-  email: z.string().email('Email khong hop le'),
-  password: z.string().min(1, 'Mat khau khong duoc trong'),
+  email: z.string().email('Email không hợp lệ'),
+  password: z.string().min(1, 'Mật khẩu không được trống'),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -55,7 +55,7 @@ export default function LoginPage() {
     mutationFn: authApi.login,
     onSuccess: (data) => {
       setAuth(data.user, data.token)
-      toast.success('Dang nhap thanh cong!')
+      toast.success('Đăng nhập thành công!')
       navigate('/')
     },
     onError: (err) => {
@@ -75,11 +75,11 @@ export default function LoginPage() {
             <span className='text-2xl font-bold text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.25)]'>E</span>
           </div>
           <h1 className='bg-gradient-to-r from-primary-500 to-blue-600 bg-clip-text text-3xl font-bold text-transparent'>EduSocial</h1>
-          <p className='mt-1 text-sm text-text-secondary'>Mang xa hoi giao duc</p>
+          <p className='mt-1 text-sm text-text-secondary'>Mạng xã hội giáo dục</p>
         </div>
 
         <div className='rounded-3xl border border-border-light bg-white/88 p-6 shadow-2xl backdrop-blur-sm'>
-          <h2 className='mb-6 text-center text-xl font-bold text-text-primary'>Dang nhap</h2>
+          <h2 className='mb-6 text-center text-xl font-bold text-text-primary'>Đăng nhập</h2>
 
           <form onSubmit={handleSubmit((data) => loginMutation.mutate(data))} className='space-y-5' noValidate>
             <Input
@@ -92,7 +92,7 @@ export default function LoginPage() {
               {...register('email')}
             />
             <Input
-              label='Mat khau'
+              label='Mật khẩu'
               type={showPassword ? 'text' : 'password'}
               placeholder='••••••••'
               error={errors.password?.message}
@@ -102,7 +102,7 @@ export default function LoginPage() {
                 <button
                   type='button'
                   onClick={() => setShowPassword((prev) => !prev)}
-                  aria-label={showPassword ? 'An mat khau' : 'Hien mat khau'}
+                  aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
                   className='text-text-muted hover:text-text-primary focus:outline-none'
                 >
                   <PasswordToggleIcon show={showPassword} />
@@ -113,20 +113,20 @@ export default function LoginPage() {
 
             <div className='flex justify-end'>
               <Link to='/forgot-password' className='text-sm text-primary-500 hover:underline'>
-                Quen mat khau?
+                Quên mật khẩu?
               </Link>
             </div>
 
             <Button type='submit' fullWidth loading={loginMutation.isPending || isSubmitting} disabled={loginMutation.isPending}>
-              Dang nhap
+              Đăng nhập
             </Button>
           </form>
         </div>
 
         <div className='mt-4 rounded-xl border border-border-light bg-white p-4 text-center shadow-sm'>
-          <span className='text-sm text-text-secondary'>Chua co tai khoan? </span>
+          <span className='text-sm text-text-secondary'>Chưa có tài khoản? </span>
           <Link to='/register' className='text-sm font-semibold text-primary-500 hover:underline'>
-            Tao tai khoan moi
+            Tạo tài khoản mới
           </Link>
         </div>
       </div>

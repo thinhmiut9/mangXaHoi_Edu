@@ -125,6 +125,9 @@ export interface Group {
 export interface Conversation {
   conversationId: string
   type: 'DIRECT' | 'GROUP'
+  directKey?: string
+  requestStatus?: 'PENDING' | 'ACCEPTED'
+  requesterId?: string
   participants?: UserPublic[]
   lastMessage?: Message
   unreadCount?: number

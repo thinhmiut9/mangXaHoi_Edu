@@ -362,10 +362,10 @@ export function SettingsPanel({ inModal = false }: { inModal?: boolean }) {
         open={confirmLogoutOpen}
         onClose={() => setConfirmLogoutOpen(false)}
         onConfirm={() => logoutMutation.mutate(undefined, { onSettled: () => setConfirmLogoutOpen(false) })}
-        title="Xac nhan dang xuat"
-        description="Ban co chac chan muon dang xuat khoi tai khoan hien tai?"
-        confirmText="Dang xuat"
-        cancelText="Huy"
+        title="Xác nhận đăng xuất"
+        description="Bạn có chắc chắn muốn đăng xuất khỏi tài khoản hiện tại?"
+        confirmText="Đăng xuất"
+        cancelText="Hủy"
         tone="warning"
         loading={logoutMutation.isPending}
       />

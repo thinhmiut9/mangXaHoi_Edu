@@ -191,6 +191,34 @@ export const chatRepository = {
     return results.map(r => r.userId)
   },
 
+  async acceptMessageRequest(conversationRef: string, userId: string): Promise<void> {
+    await runQuery(
+      `MATCH (u:User {userId: $userId})-[:PARTICIPATES_IN]-(c:Conversation)
+       WHERE c.conversationId = $conversationRef OR c.directKey = $conversationRef
+       SET c.requestStatus = 'ACCEPTED',
+           c.updatedAt = $now`,
+      { conversationRef, userId, now: new Date().toISOString() }
+    )
+  },
+
+  async getConversationMeta(conversationRef: string): Promise<Pick<Conversation, 'requestStatus' | 'requesterId'>> {
+    const result = await runQueryOne<{
+      requestStatus: Conversation['requestStatus'] | null
+      requesterId: string | null
+    }>(
+      `MATCH (c:Conversation)
+       WHERE c.conversationId = $conversationRef OR c.directKey = $conversationRef
+       RETURN coalesce(c.requestStatus, 'ACCEPTED') AS requestStatus,
+              c.requesterId AS requesterId
+       LIMIT 1`,
+      { conversationRef }
+    )
+    return {
+      requestStatus: result?.requestStatus ?? 'ACCEPTED',
+      requesterId: result?.requesterId ?? undefined,
+    }
+  },
+
   async deleteConversation(conversationRef: string, userId: string): Promise<void> {
     await runQuery(
       `MATCH (u:User {userId: $userId})-[:PARTICIPATES_IN]-(c:Conversation)

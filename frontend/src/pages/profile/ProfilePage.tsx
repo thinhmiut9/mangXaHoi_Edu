@@ -13,6 +13,7 @@ import { PostCard } from '@/components/shared/PostCard'
 import { ProfileSkeleton, PostSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Modal } from '@/components/ui/Modal'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Input } from '@/components/ui/Input'
 import { TextArea } from '@/components/ui/TextArea'
 import { useToast } from '@/components/ui/Toast'
@@ -127,6 +128,8 @@ export default function ProfilePage() {
   // Crop modal
   const [cropSrc, setCropSrc] = useState<string | null>(null)
   const [cropMode, setCropMode] = useState<'avatar' | 'cover'>('avatar')
+  // Confirm unfriend
+  const [confirmUnfriendOpen, setConfirmUnfriendOpen] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
 
@@ -532,6 +535,7 @@ export default function ProfilePage() {
   }
 
   return (
+    <>
     <div className='relative'>
       <PullToRefreshIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} />
       <div
@@ -695,7 +699,7 @@ export default function ProfilePage() {
                           <Button variant="secondary" size="sm" onClick={() => id && rejectMutation.mutate(id)} loading={rejectMutation.isPending}>Từ chối</Button>
                         </>
                       ) : isFriend ? (
-                        <Button variant="secondary" size="sm" onClick={() => id && unfriendMutation.mutate(id)} loading={unfriendMutation.isPending}>Hủy kết bạn</Button>
+                        <Button variant="secondary" size="sm" onClick={() => setConfirmUnfriendOpen(true)} loading={unfriendMutation.isPending}>Hủy kết bạn</Button>
                       ) : hasSentRequest ? (
                         <Button variant="secondary" size="sm" onClick={() => id && cancelMutation.mutate(id)} loading={cancelMutation.isPending}>Đang chờ phản hồi</Button>
                       ) : (
@@ -1094,5 +1098,20 @@ export default function ProfilePage() {
     </div>
       </div>
     </div>
+
+    <ConfirmDialog
+      open={confirmUnfriendOpen}
+      onClose={() => setConfirmUnfriendOpen(false)}
+      onConfirm={() => {
+        if (id) unfriendMutation.mutate(id, { onSettled: () => setConfirmUnfriendOpen(false) })
+      }}
+      title="Hủy kết bạn"
+      description={<span>Bạn có chắc chắn muốn hủy kết bạn với <b>{profile?.displayName}</b>?</span>}
+      confirmText="Hủy kết bạn"
+      cancelText="Đồng ý giữ bạn bè"
+      tone="warning"
+      loading={unfriendMutation.isPending}
+    />
+    </>
   )
 }

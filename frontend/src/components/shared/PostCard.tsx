@@ -8,6 +8,7 @@ import { useAuthStore } from '@/store/authStore'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { TextArea } from '@/components/ui/TextArea'
 import { useToast } from '@/components/ui/Toast'
 import { timeAgo } from '@/utils/format'
@@ -72,6 +73,7 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
   const [shareOpen, setShareOpen] = useState(false)
   const [commentMenuId, setCommentMenuId] = useState<string | null>(null)
   const [editingComment, setEditingComment] = useState<{ id: string; content: string } | null>(null)
+  const [confirmDeletePost, setConfirmDeletePost] = useState(false)
   const [commentReportOpen, setCommentReportOpen] = useState(false)
   const [reportCommentTarget, setReportCommentTarget] = useState<string | null>(null)
   const [commentReportReason, setCommentReportReason] = useState('SPAM')
@@ -653,7 +655,7 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
                             Chỉnh sửa bài viết
                           </button>
                         )}
-                        <button onClick={() => { if (window.confirm('Bạn có chắc chắn muốn xóa bài viết này?')) deletePostMutation.mutate() }} className="w-full text-left px-4 py-2 hover:bg-hover-bg text-sm text-red-500">
+                        <button onClick={() => { setConfirmDeletePost(true); setMenuOpen(false) }} className="w-full text-left px-4 py-2 hover:bg-hover-bg text-sm text-red-500">
                           Xóa bài viết
                         </button>
                       </>
@@ -1038,6 +1040,22 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
     {shareOpen && (
       <ShareModal post={post} onClose={() => setShareOpen(false)} />
     )}
+
+    {/* Confirm Delete Post Dialog */}
+    <ConfirmDialog
+      open={confirmDeletePost}
+      onClose={() => setConfirmDeletePost(false)}
+      onConfirm={() => {
+        deletePostMutation.mutate()
+        setConfirmDeletePost(false)
+      }}
+      title="Xóa bài viết"
+      description="Bạn có chắc chắn muốn xóa bài viết này? Hành động này không thể hoàn tác."
+      confirmText="Xóa bài viết"
+      cancelText="Hủy"
+      tone="danger"
+      loading={deletePostMutation.isPending}
+    />
 
     {/* Report Comment Modal */}
     <Modal

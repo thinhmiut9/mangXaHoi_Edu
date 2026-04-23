@@ -23,6 +23,9 @@ import documentRoutes from './modules/documents/documents.routes'
 
 const app = express()
 
+// Trust reverse proxy (e.g. Render) to correctly get client IP for rate limiting
+app.set('trust proxy', 1)
+
 // Security headers
 app.use(helmet())
 
