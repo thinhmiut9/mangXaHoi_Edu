@@ -637,45 +637,87 @@ export default function ProfilePage() {
               </div>
 
               {/* Name + info */}
-              <div className="min-w-0 flex-1 pt-1 sm:pt-4">
-                <h1 className="text-2xl sm:text-3xl md:text-[38px] leading-tight font-extrabold tracking-tight text-slate-900 break-words">
-                  {profile.displayName}
-                </h1>
-                <p className="mt-0.5 text-slate-500 text-sm">@{profile.username || profile.email?.split('@')[0]}</p>
-                {profile.bio && (
-                  <p className="mt-1 text-sm text-slate-700 line-clamp-2">{profile.bio}</p>
-                )}
-                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] sm:text-[13px] text-slate-500">
-                  {profile.school && (
-                    <span className="inline-flex items-center gap-1">
-                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 3L2 8l10 5 10-5-10-5z"/><path d="M6 10.5V15c0 1.5 2.7 3 6 3s6-1.5 6-3v-4.5"/></svg>
-                      <span className="truncate max-w-[120px]">{profile.school}</span>
-                    </span>
+              <div className="min-w-0 flex-1 pt-1 sm:pt-4 lg:flex lg:items-start lg:gap-4">
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-2xl sm:text-3xl md:text-[38px] leading-tight font-extrabold tracking-tight text-slate-900 break-words">
+                    {profile.displayName}
+                  </h1>
+                  <p className="mt-0.5 text-slate-500 text-sm">@{profile.username || profile.email?.split('@')[0]}</p>
+                  {profile.bio && (
+                    <p className="mt-1 text-sm text-slate-700 line-clamp-2">{profile.bio}</p>
                   )}
-                  {profile.major && (
-                    <span className="inline-flex items-center gap-1">
-                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M5 19V8l7-4 7 4v11"/></svg>
-                      <span className="truncate max-w-[120px]">{profile.major}</span>
-                    </span>
-                  )}
-                  {profile.location && (
-                    <span className="inline-flex items-center gap-1">
-                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 21s-6-5.33-6-10a6 6 0 1 1 12 0c0 4.67-6 10-6 10z"/><circle cx="12" cy="11" r="2"/></svg>
-                      <span className="truncate max-w-[120px]">{profile.location}</span>
-                    </span>
-                  )}
-                  {joinedDate && (
-                    <span className="inline-flex items-center gap-1">
-                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                      {joinedLabel}
-                    </span>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] sm:text-[13px] text-slate-500">
+                    {profile.school && (
+                      <span className="inline-flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 3L2 8l10 5 10-5-10-5z"/><path d="M6 10.5V15c0 1.5 2.7 3 6 3s6-1.5 6-3v-4.5"/></svg>
+                        <span className="truncate max-w-[120px]">{profile.school}</span>
+                      </span>
+                    )}
+                    {profile.major && (
+                      <span className="inline-flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M5 19V8l7-4 7 4v11"/></svg>
+                        <span className="truncate max-w-[120px]">{profile.major}</span>
+                      </span>
+                    )}
+                    {profile.location && (
+                      <span className="inline-flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 21s-6-5.33-6-10a6 6 0 1 1 12 0c0 4.67-6 10-6 10z"/><circle cx="12" cy="11" r="2"/></svg>
+                        <span className="truncate max-w-[120px]">{profile.location}</span>
+                      </span>
+                    )}
+                    {joinedDate && (
+                      <span className="inline-flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                        {joinedLabel}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="hidden lg:flex lg:shrink-0 lg:items-center lg:justify-end lg:gap-2 lg:pl-4">
+                  {isOwnProfile ? (
+                    <>
+                      <Button variant="secondary" size="sm" onClick={openEditModal}>Chỉnh sửa hồ sơ</Button>
+                      <button
+                        type="button"
+                        aria-label="Tùy chọn"
+                        className="h-9 w-9 rounded-lg border border-border-light bg-slate-50 text-slate-500 hover:bg-slate-100"
+                      >
+                        <svg className="w-5 h-5 mx-auto" fill="currentColor" viewBox="0 0 24 24"><circle cx="6" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="18" cy="12" r="2"/></svg>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {isBlocked ? (
+                        <Button variant="secondary" size="sm" onClick={() => id && unblockMutation.mutate(id)} loading={unblockMutation.isPending}>Bỏ chặn</Button>
+                      ) : (
+                        <>
+                          {hasReceivedRequest ? (
+                            <>
+                              <Button size="sm" onClick={() => id && acceptMutation.mutate(id)} loading={acceptMutation.isPending}>Chấp nhận</Button>
+                              <Button variant="secondary" size="sm" onClick={() => id && rejectMutation.mutate(id)} loading={rejectMutation.isPending}>Từ chối</Button>
+                            </>
+                          ) : isFriend ? (
+                            <Button variant="secondary" size="sm" onClick={() => setConfirmUnfriendOpen(true)} loading={unfriendMutation.isPending}>Hủy kết bạn</Button>
+                          ) : hasSentRequest ? (
+                            <Button variant="secondary" size="sm" onClick={() => id && cancelMutation.mutate(id)} loading={cancelMutation.isPending}>Đang chờ phản hồi</Button>
+                          ) : (
+                            <Button size="sm" onClick={() => friendRequestMutation.mutate()} loading={friendRequestMutation.isPending}>Thêm bạn bè</Button>
+                          )}
+                          <Button variant="secondary" size="sm" onClick={() => id && openConversationMutation.mutate(id)} loading={openConversationMutation.isPending}>
+                            Nhắn tin
+                          </Button>
+                          <Button variant="danger" size="sm" onClick={() => id && blockMutation.mutate(id)} loading={blockMutation.isPending}>Chặn</Button>
+                        </>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
             </div>
 
             {/* Action buttons - separate row on mobile */}
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2 lg:hidden">
               {isOwnProfile ? (
                 <>
                   <Button variant="secondary" size="sm" onClick={openEditModal}>Chỉnh sửa hồ sơ</Button>
