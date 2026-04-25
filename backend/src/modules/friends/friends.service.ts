@@ -1,6 +1,7 @@
 import { friendsRepository } from './friends.repository'
 import { AppError } from '../../middleware/errorHandler'
 import { notificationsService } from '../notifications/notifications.service'
+import { recommendationFileService } from './recommendationFile.service'
 
 export const friendsService = {
   async getFriends(userId: string, page?: number, limit?: number) {
@@ -16,8 +17,32 @@ export const friendsService = {
     return friendsRepository.getSentRequests(userId)
   },
 
-  async getSuggestions(userId: string) {
-    return friendsRepository.getSuggestions(userId)
+  async getSuggestions(userId: string, limit = 10) {
+    const fileRecommendations = recommendationFileService.getRecommendations(userId)
+
+    if (fileRecommendations.length > 0) {
+      const recommendedIds = fileRecommendations.map((item) => item.recommendedUserId)
+      const users = await friendsRepository.getSuggestionsFromIds(userId, recommendedIds, limit)
+      const metaByUserId = new Map(fileRecommendations.map((item) => [item.recommendedUserId, item]))
+
+      if (users.length > 0) {
+        return users.map((user) => {
+          const meta = metaByUserId.get(user.userId)
+          return {
+            ...user,
+            rank: meta?.rank ?? null,
+            similarityScore: meta?.similarityScore ?? null,
+            recommendationSource: 'node2vec_file',
+          }
+        })
+      }
+    }
+
+    const fallbackUsers = await friendsRepository.getSuggestions(userId, limit)
+    return fallbackUsers.map((user) => ({
+      ...user,
+      recommendationSource: 'mutual_friends',
+    }))
   },
 
   async getBlockedUsers(userId: string) {

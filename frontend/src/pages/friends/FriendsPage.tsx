@@ -58,16 +58,18 @@ function UserCard({ user, actions, online }: { user: User; actions: UserCardActi
 }
 
 export default function FriendsPage() {
+  const defaultSuggestionCount = 6
   const toast = useToast()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { token } = useAuthStore()
   const [onlineUsers, setOnlineUsers] = useState<string[]>([])
   const [confirmUnfriend, setConfirmUnfriend] = useState<{ id: string; name: string } | null>(null)
+  const [showAllSuggestions, setShowAllSuggestions] = useState(false)
 
   const { data: requests, isLoading: requestsLoading } = useQuery({ queryKey: ['friend-requests'], queryFn: friendsApi.getRequests })
   const { data: sentRequests, isLoading: sentLoading } = useQuery({ queryKey: ['friend-sent-requests'], queryFn: friendsApi.getSentRequests })
-  const { data: suggestions, isLoading: suggestionsLoading } = useQuery({ queryKey: ['friend-suggestions'], queryFn: friendsApi.getSuggestions })
+  const { data: suggestions, isLoading: suggestionsLoading } = useQuery({ queryKey: ['friend-suggestions', 50], queryFn: () => friendsApi.getSuggestions(50) })
   const { data: friends, isLoading: friendsLoading } = useQuery({ queryKey: ['friends'], queryFn: friendsApi.getFriends })
 
   useEffect(() => {
@@ -94,6 +96,10 @@ export default function FriendsPage() {
   }, [token])
 
   const onlineSet = useMemo(() => new Set(onlineUsers), [onlineUsers])
+  const visibleSuggestions = useMemo(
+    () => showAllSuggestions ? (suggestions ?? []) : (suggestions ?? []).slice(0, defaultSuggestionCount),
+    [defaultSuggestionCount, showAllSuggestions, suggestions]
+  )
 
   const acceptMutation = useMutation({
     mutationFn: friendsApi.acceptRequest,
@@ -222,14 +228,25 @@ export default function FriendsPage() {
       </section>
 
       <section>
-        <h2 className="text-xl font-bold text-text-primary mb-3">Những người bạn có thể biết</h2>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-xl font-bold text-text-primary">Những người bạn có thể biết</h2>
+          {!!suggestions?.length && suggestions.length > defaultSuggestionCount && (
+            <button
+              type="button"
+              onClick={() => setShowAllSuggestions(prev => !prev)}
+              className="text-sm font-semibold text-primary-600 hover:text-primary-700 hover:underline"
+            >
+              {showAllSuggestions ? 'Thu gọn' : 'Xem thêm'}
+            </button>
+          )}
+        </div>
         {suggestionsLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{Array.from({ length: 4 }).map((_, i) => <UserCardSkeleton key={i} />)}</div>
         ) : !suggestions?.length ? (
           <EmptyState title="Không có gợi ý nào" icon={<span className="text-2xl">🔍</span>} />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {suggestions.map(u => (
+            {visibleSuggestions.map(u => (
               <UserCard
                 key={u.id}
                 user={u}

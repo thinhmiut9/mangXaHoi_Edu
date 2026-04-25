@@ -180,6 +180,33 @@ export const friendsRepository = {
     return results.map(r => ({ ...r.suggested.properties, mutualCount: r.mutualCount }))
   },
 
+  async getSuggestionsFromIds(userId: string, recommendedIds: string[], limit = 10): Promise<UserPublic[]> {
+    if (recommendedIds.length === 0) return []
+
+    const results = await runQuery<{ idx: number; suggested: { properties: UserPublic } }>(
+      `MATCH (me:User {userId: $userId})
+       UNWIND range(0, size($recommendedIds) - 1) AS idx
+       WITH me, idx, $recommendedIds[idx] AS recommendedId
+       MATCH (suggested:User {userId: recommendedId})
+       WHERE suggested.userId <> $userId
+         AND coalesce(suggested.role, 'USER') <> 'ADMIN'
+         AND suggested.status = 'ACTIVE'
+         AND NOT EXISTS((me)-[:BLOCKED]->(suggested))
+         AND NOT EXISTS((suggested)-[:BLOCKED]->(me))
+         AND NOT EXISTS {
+           MATCH (me)-[rf]-(suggested)
+           WHERE type(rf) IN ['FRIENDS_WITH']
+         }
+         AND NOT (me)-[:REQUESTED]-(suggested)
+       RETURN idx, suggested
+       ORDER BY idx
+       LIMIT toInteger($limit)`,
+      { userId, recommendedIds, limit }
+    )
+
+    return results.map((r) => ({ ...r.suggested.properties, _recommendationIndex: r.idx } as UserPublic & { _recommendationIndex: number }))
+  },
+
   async countFriends(userId: string): Promise<number> {
     const result = await runQueryOne<{ count: number }>(
       `MATCH (u:User {userId: $userId})-[r]-(f:User)

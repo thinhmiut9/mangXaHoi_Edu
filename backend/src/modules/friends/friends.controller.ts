@@ -26,7 +26,8 @@ export const friendsController = {
 
   async getSuggestions(req: Request, res: Response, next: NextFunction) {
     try {
-      const suggestions = await friendsService.getSuggestions(req.user!.userId)
+      const limit = Number(req.query.limit) || 10
+      const suggestions = await friendsService.getSuggestions(req.user!.userId, limit)
       sendSuccess(res, suggestions)
     } catch (err) { next(err) }
   },

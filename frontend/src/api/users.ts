@@ -121,8 +121,17 @@ export const friendsApi = {
   getSentRequests: () =>
     apiClient.get<ApiResponse<any[]>>('/friends/requests/sent').then(r => (r.data.data ?? []).map(normalizeUser) as User[]),
 
-  getSuggestions: () =>
-    apiClient.get<ApiResponse<any[]>>('/friends/suggestions').then(r => (r.data.data ?? []).map(normalizeUser) as User[]),
+  getSuggestions: (limit = 20) =>
+    apiClient.get<ApiResponse<any[]>>('/friends/suggestions', { params: { limit } }).then(r => {
+      const users = (r.data.data ?? []).map(normalizeUser) as User[]
+      return users.sort((a, b) => {
+        if (a.rank !== undefined || b.rank !== undefined) {
+          return (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER)
+        }
+
+        return (b.mutualCount ?? 0) - (a.mutualCount ?? 0)
+      })
+    }),
 
   getBlockedUsers: () =>
     apiClient.get<ApiResponse<any[]>>('/friends/blocked').then(r => (r.data.data ?? []).map(normalizeUser) as User[]),

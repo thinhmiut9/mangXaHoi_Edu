@@ -28,6 +28,10 @@ export interface FrontendUser {
   createdAt: string
   updatedAt?: string
   lastOnlineAt?: string
+  rank?: number
+  similarityScore?: number
+  recommendationSource?: 'node2vec_file' | 'mutual_friends'
+  mutualCount?: number
 }
 
 function isCloudinaryImageUrl(url: unknown): url is string {
@@ -92,5 +96,9 @@ export function normalizeUser(raw: any): FrontendUser {
     createdAt: toIsoString(raw?.createdAt),
     updatedAt: raw?.updatedAt ? toIsoString(raw.updatedAt) : undefined,
     lastOnlineAt: raw?.lastOnlineAt ? toIsoString(raw.lastOnlineAt) : undefined,
+    rank: raw?.rank !== undefined && raw?.rank !== null ? toNumber(raw.rank) : undefined,
+    similarityScore: typeof raw?.similarityScore === 'number' ? raw.similarityScore : raw?.similarityScore ? Number(raw.similarityScore) : undefined,
+    recommendationSource: raw?.recommendationSource,
+    mutualCount: raw?.mutualCount !== undefined && raw?.mutualCount !== null ? toNumber(raw.mutualCount) : undefined,
   }
 }

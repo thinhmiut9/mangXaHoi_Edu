@@ -111,7 +111,7 @@ export default function SearchPage() {
   const { data: requests } = useQuery({ queryKey: ['friend-requests'], queryFn: friendsApi.getRequests })
   const { data: sentRequests } = useQuery({ queryKey: ['friend-sent-requests'], queryFn: friendsApi.getSentRequests })
   const { data: friends } = useQuery({ queryKey: ['friends'], queryFn: friendsApi.getFriends })
-  const { data: suggestions } = useQuery({ queryKey: ['friend-suggestions'], queryFn: friendsApi.getSuggestions })
+  const { data: suggestions } = useQuery({ queryKey: ['friend-suggestions', 20], queryFn: () => friendsApi.getSuggestions(20) })
 
   const requestIds = useMemo(() => new Set((requests ?? []).map((u) => u.id)), [requests])
   const sentIds = useMemo(() => new Set((sentRequests ?? []).map((u) => u.id)), [sentRequests])
@@ -451,7 +451,7 @@ export default function SearchPage() {
               <p className="text-sm text-slate-500">Chưa có gợi ý phù hợp.</p>
             ) : (
               <div className="space-y-2">
-                {suggestions.slice(0, 5).map((user) => (
+                {suggestions.map((user) => (
                   <div key={user.id} className="flex items-center gap-2 rounded-xl bg-slate-50/80 p-2">
                     <Avatar src={user.avatar} name={user.displayName} size="sm" />
                     <div className="min-w-0 flex-1">

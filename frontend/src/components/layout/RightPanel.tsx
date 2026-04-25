@@ -12,8 +12,8 @@ export function RightPanel() {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
 
   const { data: suggestions, isLoading } = useQuery({
-    queryKey: ['friend-suggestions'],
-    queryFn: friendsApi.getSuggestions,
+    queryKey: ['friend-suggestions', 20],
+    queryFn: () => friendsApi.getSuggestions(20),
   })
 
   const sendRequestMutation = useMutation({
@@ -27,7 +27,7 @@ export function RightPanel() {
     onError: (err) => toast.error(extractError(err)),
   })
 
-  const visibleSuggestions = suggestions?.filter(u => !dismissed.has(u.id)).slice(0, 5)
+  const visibleSuggestions = suggestions?.filter(u => !dismissed.has(u.id))
 
   return (
     <div className='flex flex-col gap-4 py-3'>
