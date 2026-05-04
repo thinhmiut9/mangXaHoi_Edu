@@ -1,76 +1,107 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Group, GroupJoinRequest, groupsApi, uploadsApi } from '@/api/index'
-import { Button } from '@/components/ui/Button'
-import { cn } from '@/utils/cn'
-import { useToast } from '@/components/ui/Toast'
 import { extractError } from '@/api/client'
+import { Button } from '@/components/ui/Button'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { Modal } from '@/components/ui/Modal'
+import { useToast } from '@/components/ui/Toast'
 import { useAuthStore } from '@/store/authStore'
-import { usePullToRefresh } from '@/hooks/usePullToRefresh'
-import { PullToRefreshIndicator } from '@/components/ui/PullToRefreshIndicator'
+import { cn } from '@/utils/cn'
 
 type GroupPrivacy = 'PUBLIC' | 'PRIVATE'
-type GroupCategory = 'TECH' | 'DESIGN'
 
-function privacyLabel(privacy: GroupPrivacy) {
-  return privacy === 'PUBLIC' ? 'Công khai' : 'Riêng tư'
+type JoinRequestEntry = {
+  groupId: string
+  groupName: string
+  requester: GroupJoinRequest['requester']
+  requestedAt: string
 }
 
-function inferCategory(group: Group): GroupCategory {
-  const text = `${group.name} ${group.description ?? ''}`.toLowerCase()
-  if (/ui|ux|figma|design|thiết kế/.test(text)) return 'DESIGN'
-  return 'TECH'
+function getCover(group: Group) {
+  return (
+    group.coverUrl ||
+    group.coverPhoto ||
+    `https://picsum.photos/seed/group-${group.id}/1200/720`
+  )
 }
 
-function inferTags(group: Group): string[] {
-  const text = `${group.name} ${group.description ?? ''}`
-  const candidates = text
-    .split(/[^\p{L}\p{N}.+#-]+/u)
-    .map((w) => w.trim())
-    .filter((w) => w.length >= 3)
-
-  const unique: string[] = []
-  for (const w of candidates) {
-    const normalized = w.toLowerCase()
-    if (unique.some((i) => i.toLowerCase() === normalized)) continue
-    unique.push(w)
-    if (unique.length >= 3) break
-  }
-
-  return unique.length ? unique : ['Học nhóm', 'Thảo luận', 'Tài liệu']
+function formatPrivacy(value?: GroupPrivacy) {
+  return value === 'PRIVATE' ? 'Riêng tư' : 'Công khai'
 }
 
-function groupCover(group: Group) {
-  if (group.coverUrl && group.coverUrl.trim()) return group.coverUrl
-  if (group.coverPhoto && group.coverPhoto.trim()) return group.coverPhoto
-  return `https://picsum.photos/seed/edusocial-${group.id}/1200/600`
-}
 
-const accentPalette = [
-  'from-blue-600/90 via-cyan-500/70 to-cyan-400/60',
-  'from-violet-600/90 via-indigo-500/70 to-blue-500/60',
-  'from-emerald-600/90 via-teal-500/70 to-cyan-400/60',
-  'from-rose-600/90 via-fuchsia-500/70 to-indigo-500/60',
-]
+
+function inferSummary(group: Group) {
+  if (group.description?.trim()) return group.description
+  return 'Không gian để thảo luận, chia sẻ tài liệu và cập nhật tiến độ hằng tuần.'
+}
 
 export default function GroupsPage() {
   const { user } = useAuthStore()
   const toast = useToast()
   const queryClient = useQueryClient()
+  const coverInputRef = useRef<HTMLInputElement | null>(null)
 
-  const [activeCategory, setActiveCategory] = useState<'ALL' | GroupCategory>('ALL')
-  const [showPendingRequests, setShowPendingRequests] = useState(false)
-  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false)
+  const [query, setQuery] = useState('')
+  const [activeTab, setActiveTab] = useState<'all' | 'mine' | 'discover'>('all')
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showRequestsModal, setShowRequestsModal] = useState(false)
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null)
+  const [confirmLeaveGroup, setConfirmLeaveGroup] = useState<{ id: string; name: string } | null>(null)
+  const [confirmDeleteGroup, setConfirmDeleteGroup] = useState<{ id: string; name: string } | null>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!(e.target as Element).closest('.group-dropdown-menu')) {
+        setOpenDropdownId(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  useEffect(() => {
+    if (searchParams.get('action') === 'requests') {
+      setShowRequestsModal(true)
+      setSearchParams({})
+    }
+  }, [searchParams, setSearchParams])
+  const [showAllMyGroups, setShowAllMyGroups] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [newGroupDescription, setNewGroupDescription] = useState('')
-  const [newGroupTopic, setNewGroupTopic] = useState('')
-  const [newGroupCoverUrl, setNewGroupCoverUrl] = useState('')
   const [newGroupPrivacy, setNewGroupPrivacy] = useState<GroupPrivacy>('PUBLIC')
+  const [newGroupCoverUrl, setNewGroupCoverUrl] = useState('')
+  const [newGroupCoverFile, setNewGroupCoverFile] = useState<File | null>(null)
+  const [newGroupCoverPreviewUrl, setNewGroupCoverPreviewUrl] = useState('')
 
-  const myGroupsSectionRef = useRef<HTMLElement | null>(null)
-  const discoverSectionRef = useRef<HTMLElement | null>(null)
-  const coverFileInputRef = useRef<HTMLInputElement | null>(null)
+  useEffect(() => {
+    return () => {
+      if (newGroupCoverPreviewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(newGroupCoverPreviewUrl)
+      }
+    }
+  }, [newGroupCoverPreviewUrl])
+
+  const resetCreateGroupForm = () => {
+    if (newGroupCoverPreviewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(newGroupCoverPreviewUrl)
+    }
+    setNewGroupName('')
+    setNewGroupDescription('')
+    setNewGroupPrivacy('PUBLIC')
+    setNewGroupCoverUrl('')
+    setNewGroupCoverFile(null)
+    setNewGroupCoverPreviewUrl('')
+  }
+
+  const closeCreateModal = () => {
+    setShowCreateModal(false)
+    resetCreateGroupForm()
+  }
 
   const myGroupsQuery = useQuery({
     queryKey: ['my-groups'],
@@ -83,14 +114,15 @@ export default function GroupsPage() {
   })
 
   const ownerJoinRequestsQuery = useQuery({
-    queryKey: ['owner-join-requests', myGroupsQuery.data?.map((g) => `${g.id}:${g.isOwner ? '1' : '0'}`).join('|')],
-    queryFn: async () => {
-      const groups = myGroupsQuery.data ?? []
-      const ownerGroups = groups.filter((g) => g.isOwner)
-      const result = await Promise.all(
+    queryKey: ['owner-join-requests', myGroupsQuery.data?.map((group) => `${group.id}:${group.isOwner ? '1' : '0'}`).join('|')],
+    enabled: !!myGroupsQuery.data,
+    queryFn: async (): Promise<JoinRequestEntry[]> => {
+      const mine = myGroupsQuery.data ?? []
+      const ownerGroups = mine.filter((group) => group.isOwner)
+      const rows = await Promise.all(
         ownerGroups.map(async (group) => {
           const requests = await groupsApi.getJoinRequests(group.id)
-          return requests.map((request: GroupJoinRequest) => ({
+          return requests.map((request) => ({
             groupId: group.id,
             groupName: group.name,
             requester: request.requester,
@@ -98,9 +130,8 @@ export default function GroupsPage() {
           }))
         })
       )
-      return result.flat()
+      return rows.flat()
     },
-    enabled: !!myGroupsQuery.data,
   })
 
   const joinMutation = useMutation({
@@ -108,40 +139,54 @@ export default function GroupsPage() {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['my-groups'] })
       queryClient.invalidateQueries({ queryKey: ['groups'] })
-      toast.success(result.message || (result.status === 'REQUESTED' ? 'Đã gửi yêu cầu tham gia nhóm.' : 'Đã tham gia nhóm'))
+      toast.success(result.status === 'REQUESTED' ? 'Đã gửi yêu cầu tham gia nhóm.' : 'Đã tham gia nhóm.')
     },
-    onError: (err) => toast.error(extractError(err)),
+    onError: (error) => toast.error(extractError(error)),
+  })
+
+  const leaveMutation = useMutation({
+    mutationFn: (groupId: string) => groupsApi.leave(groupId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-groups'] })
+      queryClient.invalidateQueries({ queryKey: ['groups'] })
+      toast.success('Đã rời nhóm.')
+    },
+    onError: (error) => toast.error(extractError(error)),
+  })
+
+  const deleteGroupMutation = useMutation({
+    mutationFn: (groupId: string) => groupsApi.deleteGroup(groupId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-groups'] })
+      queryClient.invalidateQueries({ queryKey: ['groups'] })
+      toast.success('Đã xóa nhóm.')
+    },
+    onError: (error) => toast.error(extractError(error)),
   })
 
   const createGroupMutation = useMutation({
-    mutationFn: () =>
-      groupsApi.createGroup({
+    mutationFn: async () => {
+      let coverUrl = newGroupCoverUrl.trim() || undefined
+      if (newGroupCoverFile) {
+        const uploaded = await uploadsApi.uploadImage(newGroupCoverFile, 'covers')
+        coverUrl = uploaded.url
+      }
+
+      return groupsApi.createGroup({
         name: newGroupName.trim(),
-        description: [newGroupDescription.trim(), newGroupTopic.trim()].filter(Boolean).join(' • ') || undefined,
-        coverUrl: newGroupCoverUrl.trim() || undefined,
+        description: newGroupDescription.trim() || undefined,
+        coverUrl,
         privacy: newGroupPrivacy,
-      }),
+      })
+    },
     onSuccess: () => {
-      setShowCreateGroupModal(false)
-      setNewGroupName('')
-      setNewGroupDescription('')
-      setNewGroupTopic('')
-      setNewGroupCoverUrl('')
-      setNewGroupPrivacy('PUBLIC')
+      setShowCreateModal(false)
+      resetCreateGroupForm()
       queryClient.invalidateQueries({ queryKey: ['my-groups'] })
       queryClient.invalidateQueries({ queryKey: ['groups'] })
-      toast.success('Tạo nhóm thành công')
+      toast.success('Tạo nhóm thành công.')
     },
-    onError: (err) => toast.error(extractError(err)),
-  })
-
-  const uploadCoverMutation = useMutation({
-    mutationFn: (file: File) => uploadsApi.uploadImage(file, 'covers'),
-    onSuccess: (data) => {
-      setNewGroupCoverUrl(data.url)
-      toast.success('Tải ảnh bìa lên thành công')
-    },
-    onError: (err) => toast.error(extractError(err)),
+    onError: (error) => toast.error(extractError(error)),
   })
 
   const approveRequestMutation = useMutation({
@@ -150,412 +195,554 @@ export default function GroupsPage() {
       queryClient.invalidateQueries({ queryKey: ['owner-join-requests'] })
       queryClient.invalidateQueries({ queryKey: ['my-groups'] })
       queryClient.invalidateQueries({ queryKey: ['groups'] })
-      toast.success('Đã duyệt yêu cầu tham gia')
+      toast.success('Đã duyệt yêu cầu.')
     },
-    onError: (err) => toast.error(extractError(err)),
+    onError: (error) => toast.error(extractError(error)),
   })
 
   const rejectRequestMutation = useMutation({
     mutationFn: ({ groupId, userId }: { groupId: string; userId: string }) => groupsApi.rejectJoinRequest(groupId, userId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['owner-join-requests'] })
-      toast.success('Đã từ chối yêu cầu tham gia')
+      toast.success('Đã từ chối yêu cầu.')
     },
-    onError: (err) => toast.error(extractError(err)),
+    onError: (error) => toast.error(extractError(error)),
   })
 
   const myGroups = myGroupsQuery.data ?? []
   const allGroups = groupsQuery.data ?? []
-  const myGroupIds = new Set(myGroups.map((g) => g.id))
+  const myIds = new Set(myGroups.map((group) => group.id))
+  const pendingRequests = ownerJoinRequestsQuery.data ?? []
 
-  const discoverGroups = useMemo(() => {
-    const base = allGroups.filter((group) => !myGroupIds.has(group.id))
-    if (activeCategory === 'ALL') return base
-    return base.filter((group) => inferCategory(group) === activeCategory)
-  }, [allGroups, myGroupIds, activeCategory])
+  const discoverGroups = useMemo(
+    () => allGroups.filter((group) => !myIds.has(group.id)),
+    [allGroups, myIds]
+  )
 
-  const pendingJoinRequests = ownerJoinRequestsQuery.data ?? []
-  const stats = useMemo(() => ({
-    joinedGroups: myGroups.length,
-    pendingApprovals: pendingJoinRequests.length,
-  }), [myGroups.length, pendingJoinRequests.length])
+  const filteredMyGroups = useMemo(() => {
+    const keyword = query.trim().toLowerCase()
+    if (!keyword) return myGroups
+    return myGroups.filter((group) =>
+      `${group.name} ${group.description ?? ''}`.toLowerCase().includes(keyword)
+    )
+  }, [myGroups, query])
 
-  const refreshPage = useCallback(async () => {
-    await Promise.all([
-      myGroupsQuery.refetch(),
-      groupsQuery.refetch(),
-      ownerJoinRequestsQuery.refetch(),
-    ])
-  }, [groupsQuery, myGroupsQuery, ownerJoinRequestsQuery])
-  const { pullDistance, isRefreshing } = usePullToRefresh(refreshPage)
+  const filteredDiscoverGroups = useMemo(() => {
+    const keyword = query.trim().toLowerCase()
+    if (!keyword) return discoverGroups
+    return discoverGroups.filter((group) =>
+      `${group.name} ${group.description ?? ''}`.toLowerCase().includes(keyword)
+    )
+  }, [discoverGroups, query])
+
+  const visibleMyGroups = activeTab === 'discover' ? [] : filteredMyGroups
+  const visibleDiscoverGroups = activeTab === 'mine' ? [] : filteredDiscoverGroups
+  const displayedMyGroups = showAllMyGroups ? visibleMyGroups : visibleMyGroups.slice(0, 6)
+  const hasMoreMyGroups = visibleMyGroups.length > 6
+
+  const ownedGroups = myGroups.filter((group) => group.isOwner || group.ownerId === user?.id)
+  const stats = [
+    { label: 'Đã tham gia', value: myGroups.length },
+    { label: 'Khám phá', value: discoverGroups.length },
+    { label: 'Quản lý', value: ownedGroups.length },
+    { label: 'Chờ duyệt', value: pendingRequests.length },
+  ]
+  const createGroupCoverPreview = newGroupCoverPreviewUrl || newGroupCoverUrl.trim()
 
   return (
     <>
-      <div className='relative'>
-        <PullToRefreshIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} />
-        <div
-          style={{
-            transform: `translateY(${pullDistance}px)`,
-            transition: isRefreshing || pullDistance === 0 ? 'transform 160ms ease-out' : undefined,
-          }}
-        >
-      <div className='space-y-6 pb-8'>
-        <section className='sm:rounded-[32px] sm:border border-slate-200/80 bg-white/80 sm:p-3 p-0 sm:shadow-[0_16px_36px_rgba(15,23,42,0.08)] backdrop-blur-sm'>
-          <div className='grid grid-cols-1 gap-5'>
-            <article className='relative overflow-hidden rounded-[22px] sm:rounded-[28px] bg-gradient-to-br from-[#0f1b4d] via-[#243c8f] to-[#312e81] p-4 sm:p-5 text-white shadow-[0_14px_28px_rgba(30,64,175,0.38)]'>
-              <div className='pointer-events-none absolute -left-16 -top-20 h-56 w-56 rounded-full bg-blue-400/25 blur-3xl' />
-              <div className='pointer-events-none absolute -bottom-20 right-0 h-64 w-64 rounded-full bg-indigo-300/20 blur-3xl' />
-
-              <div className='relative z-10'>
-                <span className='inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold backdrop-blur'>
-                  Không gian nhóm mới
+      <div className='mx-auto max-w-[1400px] space-y-6 px-0 pb-8 sm:px-4 lg:px-6'>
+        <section className='overflow-hidden rounded-none border-0 bg-[#0d1328] text-white sm:rounded-[32px] sm:border sm:border-slate-800'>
+          <div className='relative'>
+            <div className='absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.22),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(251,191,36,0.18),transparent_35%)]' />
+            <div className='relative grid gap-6 px-4 py-6 sm:px-8 sm:py-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-end'>
+              <div className='space-y-4'>
+                <span className='inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-sky-100'>
+                  Trung tâm nhóm
                 </span>
-                <h1 className='mt-2 text-2xl sm:text-4xl font-bold tracking-tight'>Nhóm</h1>
-                <p className='mt-2 max-w-3xl text-sm sm:text-[16px]/7 text-blue-100'>
-                  Tạo nhóm, quản lý thành viên và chia sẻ nội dung trong một giao diện gọn gàng, hiện đại và trực quan hơn.
-                </p>
-
-                <div className='mt-3 sm:mt-4 flex flex-wrap gap-2 sm:gap-2.5'>
+                <div className='space-y-3'>
+                  <h1 className='max-w-2xl text-3xl font-bold tracking-tight sm:text-5xl'>
+                    Quản lý và khám phá nhóm trong một giao diện gọn, rõ và dễ dùng hơn.
+                  </h1>
+                  <p className='max-w-2xl text-sm leading-6 text-slate-300 sm:text-base'>
+                    Theo dõi nhóm bạn tham gia, duyệt yêu cầu chờ xử lý và vào nhanh các không gian học tập đang hoạt động.
+                  </p>
+                </div>
+                <div className='flex flex-wrap gap-3'>
                   <Button
-                    onClick={() => setShowCreateGroupModal(true)}
-                    className='!rounded-2xl !bg-white !px-4 !text-slate-900 hover:!bg-slate-100'
+                    onClick={() => setShowCreateModal(true)}
+                    className='!rounded-full !bg-[#f8fafc] !px-5 !text-slate-950 hover:!bg-white'
                   >
-                    + Tạo nhóm mới
+                    Tạo nhóm
                   </Button>
                   <Button
                     variant='outline'
-                    onClick={() => {
-                      setActiveCategory('ALL')
-                      discoverSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                    }}
-                    className='!rounded-2xl !border-white/30 !bg-white/10 !px-4 !text-white backdrop-blur hover:!bg-white/20'
+                    onClick={() => setShowRequestsModal(true)}
+                    className='!rounded-full !border-white/20 !bg-white/5 !px-5 !text-white hover:!bg-white/10'
                   >
-                    Khám phá nhóm
+                    Xem yêu cầu
                   </Button>
                 </div>
-
-                <div className='mt-4 sm:mt-5 grid grid-cols-2 gap-2 sm:gap-2.5'>
-                  <button
-                    onClick={() => myGroupsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                    className='rounded-2xl border border-white/10 bg-white/10 p-2.5 text-left backdrop-blur-sm transition hover:bg-white/20'
-                  >
-                    <p className='text-2xl font-semibold leading-none'>{stats.joinedGroups.toString().padStart(2, '0')}</p>
-                    <p className='mt-1.5 text-xs sm:text-sm text-blue-100'>Nhóm đang tham gia</p>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setShowPendingRequests(true)
-                      ownerJoinRequestsQuery.refetch()
-                    }}
-                    className='rounded-2xl border border-white/10 bg-white/10 p-2.5 text-left backdrop-blur-sm transition hover:bg-white/20'
-                  >
-                    <p className='text-2xl font-semibold leading-none'>{stats.pendingApprovals.toString().padStart(2, '0')}</p>
-                    <p className='mt-1.5 text-xs sm:text-sm text-blue-100'>Yêu cầu chờ duyệt</p>
-                  </button>
-                </div>
               </div>
-            </article>
+
+              <div className='grid grid-cols-2 gap-3'>
+                {stats.map((item) => (
+                  <div key={item.label} className='rounded-[24px] border border-white/10 bg-white/5 p-4 backdrop-blur'>
+                    <div className='text-3xl font-bold'>{String(item.value).padStart(2, '0')}</div>
+                    <div className='mt-1 text-sm text-slate-300'>{item.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
 
-        <div className='grid grid-cols-1 gap-5'>
-          <main className='space-y-5'>
-            <section ref={myGroupsSectionRef} className='sm:rounded-[32px] sm:border border-slate-200/80 bg-white sm:p-5 p-3 sm:shadow-[0_16px_36px_rgba(15,23,42,0.08)]'>
-              <div className='mb-4 flex items-center justify-between'>
-                <div>
-                  <h2 className='text-2xl font-bold text-slate-800'>Nhóm của bạn</h2>
-                  <p className='mt-1 text-sm text-slate-500'>Các nhóm bạn đã tham gia hoặc đang quản lý.</p>
-                </div>
-                <Button variant='secondary' size='sm' className='rounded-xl' onClick={() => myGroupsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-                  Xem tất cả
-                </Button>
-              </div>
-
-              {myGroupsQuery.isLoading ? (
-                <p className='text-sm text-slate-500'>Đang tải nhóm của bạn...</p>
-              ) : myGroups.length === 0 ? (
-                <p className='text-sm text-slate-500'>Bạn chưa tham gia nhóm nào.</p>
-              ) : (
-                <div className='grid grid-cols-1 gap-4 lg:grid-cols-2'>
-                  {myGroups.map((group, index) => {
-                    const role = group.isOwner || group.ownerId === user?.id ? 'Quản trị viên' : 'Thành viên'
-                    return (
-                      <article key={group.id} className='group overflow-hidden rounded-3xl border border-slate-200 bg-white transition hover:-translate-y-0.5 hover:shadow-[0_16px_32px_rgba(37,99,235,0.16)]'>
-                        <div className='relative h-36 overflow-hidden'>
-                          <img src={groupCover(group)} alt={group.name} className='h-full w-full object-cover transition duration-300 group-hover:scale-105' />
-                          <div className={cn('absolute inset-0 bg-gradient-to-r', accentPalette[index % accentPalette.length])} />
-                          <div className='absolute inset-x-0 bottom-0 p-4 text-white'>
-                            <p className='text-sm font-medium opacity-90'>{role}</p>
-                            <h3 className='line-clamp-1 text-3xl font-semibold'>{group.name}</h3>
-                          </div>
-                        </div>
-
-                        <div className='space-y-3 p-4'>
-                          <div className='flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500'>
-                            <span>{group.membersCount ?? 0} thành viên</span>
-                            <span>Đang hoạt động</span>
-                            <span className='rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600'>{privacyLabel((group.privacy as GroupPrivacy) ?? 'PUBLIC')}</span>
-                          </div>
-
-                          <div className='flex gap-2'>
-                            <Link to={`/groups/${group.id}`}>
-                              <Button size='sm' className='rounded-xl'>Vào nhóm</Button>
-                            </Link>
-                            <Link to={`/groups/${group.id}`}>
-                              <Button variant='secondary' size='sm' className='rounded-xl'>
-                                {group.isOwner || group.ownerId === user?.id ? 'Quản lý' : 'Xem nhóm'}
-                              </Button>
-                            </Link>
-                          </div>
-                        </div>
-                      </article>
-                    )
-                  })}
-                </div>
-              )}
-            </section>
-
-            <section ref={discoverSectionRef} className='sm:rounded-[32px] sm:border border-slate-200/80 bg-white sm:p-5 p-3 sm:shadow-[0_16px_36px_rgba(15,23,42,0.08)]'>
-              <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
-                <div>
-                  <h2 className='text-2xl font-bold text-slate-800'>Khám phá nhóm</h2>
-                  <p className='mt-1 text-sm text-slate-500'>Tìm các cộng đồng phù hợp với chủ đề học tập của bạn.</p>
-                </div>
-
-                <div className='flex items-center gap-2'>
-                  {[
-                    { key: 'ALL', label: 'Tất cả' },
-                    { key: 'TECH', label: 'Công nghệ' },
-                    { key: 'DESIGN', label: 'Thiết kế' },
-                  ].map((item) => (
-                    <button
-                      key={item.key}
-                      onClick={() => setActiveCategory(item.key as 'ALL' | GroupCategory)}
-                      className={cn(
-                        'rounded-full px-3 py-1.5 text-sm font-medium transition-all',
-                        activeCategory === item.key ? 'bg-blue-50 text-blue-600 shadow-[0_4px_10px_rgba(59,130,246,0.2)]' : 'bg-slate-100 text-slate-600 hover:text-slate-800'
-                      )}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {groupsQuery.isLoading ? (
-                <p className='text-sm text-slate-500'>Đang tải danh sách nhóm...</p>
-              ) : discoverGroups.length === 0 ? (
-                <p className='text-sm text-slate-500'>Không còn nhóm phù hợp trong bộ lọc hiện tại.</p>
-              ) : (
-                <div className='space-y-3'>
-                  {discoverGroups.map((group: Group) => (
-                    <article key={group.id} className='rounded-3xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4 transition hover:border-blue-200 hover:bg-white hover:shadow-[0_12px_26px_rgba(37,99,235,0.14)]'>
-                      <div className='flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3'>
-                        <div className='flex min-w-0 gap-3'>
-                          <img src={groupCover(group)} alt={group.name} className='h-12 w-12 sm:h-14 sm:w-14 rounded-2xl object-cover ring-1 ring-slate-200 shrink-0' />
-                          <div className='min-w-0'>
-                            <div className='flex flex-wrap items-center gap-2'>
-                              <h3 className='text-lg sm:text-2xl font-semibold text-slate-800'>{group.name}</h3>
-                              <span className='rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600'>{privacyLabel((group.privacy as GroupPrivacy) ?? 'PUBLIC')}</span>
-                              <span className='text-xs sm:text-sm text-slate-500'>{group.membersCount ?? 0} thành viên</span>
-                            </div>
-                            <p className='mt-1 text-xs sm:text-sm text-slate-600 line-clamp-2'>{group.description || 'Nhóm học tập và trao đổi kiến thức.'}</p>
-                            <div className='mt-1.5 sm:mt-2 flex flex-wrap gap-1.5'>
-                              {inferTags(group).map((tag) => (
-                                <span key={tag} className='rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600'>{tag}</span>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className='sm:shrink-0'>
-                          {group.isJoinRequested ? (
-                            <Button
-                              disabled
-                              className='w-full sm:w-auto rounded-2xl bg-slate-300 px-4 text-slate-700'
-                            >
-                              Đang chờ duyệt
-                            </Button>
-                          ) : (
-                            <Button
-                              loading={joinMutation.isPending}
-                              onClick={() => joinMutation.mutate(group.id)}
-                              className='w-full sm:w-auto rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 shadow-[0_10px_18px_rgba(37,99,235,0.35)] hover:from-blue-500 hover:to-indigo-500'
-                            >
-                              Tham gia
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </section>
-          </main>
-        </div>
-      </div>
-        </div>
-      </div>
-
-      {showPendingRequests && (
-        <div className='fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[2px]' onClick={() => setShowPendingRequests(false)}>
-          <div className='max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.24)]' onClick={(e) => e.stopPropagation()}>
-            <div className='flex items-center justify-between border-b border-slate-200 px-5 py-4'>
-              <h2 className='text-xl font-bold text-slate-800'>Yêu cầu chờ duyệt theo nhóm</h2>
-              <Button variant='secondary' size='sm' className='rounded-xl' onClick={() => setShowPendingRequests(false)}>
-                Đóng
-              </Button>
+        <section className='rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5'>
+          <div className='flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
+            <div className='flex flex-wrap gap-2'>
+              {[
+                { key: 'all', label: 'Tất cả nhóm' },
+                { key: 'mine', label: 'Nhóm của bạn' },
+                { key: 'discover', label: 'Khám phá' },
+              ].map((item) => (
+                <button
+                  key={item.key}
+                  type='button'
+                  onClick={() => setActiveTab(item.key as 'all' | 'mine' | 'discover')}
+                  className={cn(
+                    'rounded-full px-4 py-2 text-sm font-medium transition',
+                    activeTab === item.key
+                      ? 'bg-slate-950 text-white'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  )}
+                >
+                  {item.label}
+                </button>
+              ))}
             </div>
 
-            <div className='max-h-[calc(85vh-72px)] overflow-y-auto p-5'>
-              {ownerJoinRequestsQuery.isLoading ? (
-                <p className='text-sm text-slate-500'>Đang tải yêu cầu chờ duyệt...</p>
-              ) : pendingJoinRequests.length === 0 ? (
-                <p className='text-sm text-slate-500'>Hiện không có yêu cầu chờ duyệt nào.</p>
-              ) : (
-                <div className='space-y-3'>
-                  {pendingJoinRequests.map((entry) => (
-                    <article
-                      key={`${entry.groupId}-${entry.requester.id}-${entry.requestedAt}`}
-                      className='flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-3'
-                    >
-                      <div className='min-w-0'>
-                        <Link to={`/groups/${entry.groupId}`} className='truncate text-sm text-blue-600 hover:underline'>
-                          Nhóm: {entry.groupName}
-                        </Link>
-                        <p className='truncate text-base font-semibold text-slate-800'>{entry.requester.displayName}</p>
-                        <p className='text-xs text-slate-500'>{new Date(entry.requestedAt).toLocaleString('vi-VN')}</p>
-                      </div>
-
-                      <div className='flex items-center gap-2'>
-                        <Button
-                          size='sm'
-                          loading={approveRequestMutation.isPending}
-                          onClick={() => approveRequestMutation.mutate({ groupId: entry.groupId, userId: entry.requester.id })}
-                          className='rounded-xl'
-                        >
-                          Duyệt
-                        </Button>
-                        <Button
-                          variant='secondary'
-                          size='sm'
-                          loading={rejectRequestMutation.isPending}
-                          onClick={() => rejectRequestMutation.mutate({ groupId: entry.groupId, userId: entry.requester.id })}
-                          className='rounded-xl'
-                        >
-                          Từ chối
-                        </Button>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
+            <div className='flex w-full max-w-xl items-center gap-3'>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder='Tìm theo tên hoặc mô tả'
+                className='h-11 flex-1 rounded-full border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-slate-400 focus:bg-white'
+              />
+              <Button variant='secondary' onClick={() => {
+                myGroupsQuery.refetch()
+                groupsQuery.refetch()
+                ownerJoinRequestsQuery.refetch()
+              }}>
+                Làm mới
+              </Button>
             </div>
           </div>
-        </div>
-      )}
+        </section>
 
-      {showCreateGroupModal && (
-        <div className='fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[2px]' onClick={() => setShowCreateGroupModal(false)}>
-          <div className='w-full max-w-xl rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_24px_60px_rgba(15,23,42,0.24)]' onClick={(e) => e.stopPropagation()}>
-            <div className='mb-4 flex items-center justify-between'>
-              <h2 className='text-xl font-bold text-slate-800'>Tạo nhóm mới</h2>
-              <Button variant='secondary' size='sm' onClick={() => setShowCreateGroupModal(false)}>
-                Đóng
-              </Button>
+        {(activeTab === 'all' || activeTab === 'mine') && (
+          <section className='space-y-4 rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5'>
+          <div className='flex items-end justify-between gap-4'>
+            <div>
+              <p className='text-xs font-semibold uppercase tracking-[0.2em] text-slate-400'>Không gian của bạn</p>
+              <h2 className='mt-1 text-2xl font-bold text-slate-950'>Nhóm đã tham gia</h2>
+            </div>
+            <p className='text-sm text-slate-500'>{visibleMyGroups.length} nhóm hiển thị</p>
+          </div>
+
+          {myGroupsQuery.isLoading ? (
+            <p className='rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500'>
+              Đang tải danh sách nhóm của bạn...
+            </p>
+          ) : visibleMyGroups.length === 0 ? (
+            <p className='rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500'>
+              Không có nhóm nào khớp với bộ lọc hiện tại.
+            </p>
+          ) : (
+            <>
+              <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-3'>
+                {displayedMyGroups.map((group) => {
+                  const role = group.isOwner || group.ownerId === user?.id ? 'Quản trị' : 'Thành viên'
+                  return (
+                    <article key={group.id} className='flex flex-col overflow-visible rounded-[28px] border border-slate-200 bg-white'>
+                      <div className='relative h-40 overflow-hidden rounded-t-[28px]'>
+                        <img src={getCover(group)} alt={group.name} className='h-full w-full object-cover' />
+                        <div className='absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent' />
+                        <div className='absolute inset-x-0 bottom-0 p-4 text-white'>
+                          <div className='mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-200'>
+                            <span>{role}</span>
+                            <span className='h-1 w-1 rounded-full bg-white/70' />
+                            <span>{formatPrivacy(group.privacy)}</span>
+                          </div>
+                          <h3 className='line-clamp-2 text-2xl font-bold'>{group.name}</h3>
+                        </div>
+                      </div>
+
+                      <div className='flex flex-1 flex-col p-4'>
+                        <p className='min-h-[48px] line-clamp-2 text-sm leading-6 text-slate-600'>{inferSummary(group)}</p>
+                        <div className='mt-4 flex items-center text-sm text-slate-500'>
+                          <span>{group.membersCount ?? 0} thành viên</span>
+                        </div>
+                        <div className='mt-4 flex gap-2'>
+                          <Link to={`/groups/${group.id}`} className='w-[70%]'>
+                            <Button fullWidth>Vào nhóm</Button>
+                          </Link>
+                          <div className='group-dropdown-menu relative w-[30%]'>
+                            <Button 
+                              variant='secondary' 
+                              fullWidth 
+                              onClick={(e) => {
+                                e.preventDefault()
+                                setOpenDropdownId(openDropdownId === group.id ? null : group.id)
+                              }}
+                            >
+                              <svg className="mx-auto h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
+                              </svg>
+                            </Button>
+                            
+                            {openDropdownId === group.id && (
+                              <div className='absolute bottom-full right-0 z-10 mb-2 w-40 origin-bottom-right rounded-xl border border-slate-200 bg-white p-1 shadow-lg'>
+                                <button
+                                  type='button'
+                                  onClick={() => {
+                                    setOpenDropdownId(null)
+                                    setConfirmLeaveGroup({ id: group.id, name: group.name })
+                                  }}
+                                  className='block w-full rounded-lg px-3 py-2 text-left text-sm font-medium hover:bg-slate-50 text-slate-700'
+                                >
+                                  Rời nhóm
+                                </button>
+                                {role === 'Quản trị' && (
+                                  <button
+                                    type='button'
+                                    onClick={() => {
+                                      setOpenDropdownId(null)
+                                      setConfirmDeleteGroup({ id: group.id, name: group.name })
+                                    }}
+                                    className='mt-1 block w-full rounded-lg px-3 py-2 text-left text-sm font-medium hover:bg-red-50 text-red-600'
+                                  >
+                                    Xóa nhóm
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+
+              {hasMoreMyGroups && (
+                <div className='flex justify-center pt-2'>
+                  <Button variant='secondary' onClick={() => setShowAllMyGroups((prev) => !prev)}>
+                    {showAllMyGroups ? 'Thu gọn' : 'Xem thêm'}
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </section>
+        )}
+
+        {(activeTab === 'all' || activeTab === 'discover') && (
+          <section className='space-y-4 rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5'>
+            <div className='flex items-end justify-between gap-4'>
+              <div>
+                <p className='text-xs font-semibold uppercase tracking-[0.2em] text-slate-400'>Khám phá</p>
+                <h2 className='mt-1 text-2xl font-bold text-slate-950'>Nhóm có thể tham gia</h2>
+              </div>
+              <p className='text-sm text-slate-500'>{visibleDiscoverGroups.length} nhóm hiển thị</p>
             </div>
 
-            <div className='space-y-3'>
-              <input
-                placeholder='Tên nhóm'
-                value={newGroupName}
-                onChange={(e) => setNewGroupName(e.target.value)}
-                className='h-11 w-full rounded-2xl border border-slate-200 bg-slate-50/70 px-4 text-sm outline-none ring-0 transition focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100'
-              />
+            {groupsQuery.isLoading ? (
+              <p className='rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500'>
+                Đang tải danh sách nhóm...
+              </p>
+            ) : visibleDiscoverGroups.length === 0 ? (
+              <p className='rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500'>
+                Không có nhóm nào khớp với bộ lọc hiện tại.
+              </p>
+            ) : (
+              <div className='space-y-3'>
+                {visibleDiscoverGroups.map((group) => (
+                  <article key={group.id} className='rounded-[24px] border border-slate-200 bg-slate-50 p-3 transition hover:bg-white'>
+                    <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
+                      <div className='flex min-w-0 gap-3'>
+                        <img src={getCover(group)} alt={group.name} className='h-16 w-16 rounded-[20px] object-cover' />
+                        <div className='min-w-0'>
+                          <div className='flex flex-wrap items-center gap-2'>
+                            <h3 className='text-lg font-bold text-slate-950'>{group.name}</h3>
+                          </div>
+                          <p className='mt-1 line-clamp-2 text-sm leading-6 text-slate-600'>{inferSummary(group)}</p>
+                          <div className='mt-2 text-xs font-medium uppercase tracking-[0.14em] text-slate-400'>
+                            {group.membersCount ?? 0} thành viên
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className='sm:w-[160px]'>
+                        {group.isJoinRequested ? (
+                          <Button fullWidth disabled variant='secondary'>
+                            Đang chờ duyệt
+                          </Button>
+                        ) : (
+                          <Button
+                            fullWidth
+                            loading={joinMutation.isPending}
+                            onClick={() => joinMutation.mutate(group.id)}
+                          >
+                            Tham gia nhóm
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+      </div>
+
+      <Modal
+        open={showCreateModal}
+        onClose={closeCreateModal}
+        title='Tạo nhóm'
+        size='2xl'
+        footer={(
+          <>
+            <Button variant='secondary' onClick={closeCreateModal} disabled={createGroupMutation.isPending}>
+              Hủy
+            </Button>
+            <Button
+              onClick={() => createGroupMutation.mutate()}
+              loading={createGroupMutation.isPending}
+              disabled={!newGroupName.trim()}
+            >
+              Tạo nhóm
+            </Button>
+          </>
+        )}
+      >
+        <div className='grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_360px]'>
+          <div className='space-y-4'>
+            <div className='rounded-[24px] border border-slate-200 bg-slate-50/80 p-4'>
+              <p className='text-xs font-semibold uppercase tracking-[0.18em] text-slate-400'>Thông tin cơ bản</p>
+              <div className='mt-4 space-y-4'>
+                <label className='block space-y-2'>
+                  <span className='text-sm font-medium text-slate-700'>Tên nhóm</span>
+                  <input
+                    value={newGroupName}
+                    onChange={(event) => setNewGroupName(event.target.value)}
+                    placeholder='Ví dụ: Nhóm học AI'
+                    className='h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100'
+                  />
+                </label>
+
+                <label className='block space-y-2'>
+                  <span className='text-sm font-medium text-slate-700'>Mô tả</span>
+                  <textarea
+                    value={newGroupDescription}
+                    onChange={(event) => setNewGroupDescription(event.target.value)}
+                    placeholder='Mô tả ngắn về mục tiêu, cách hoạt động hoặc chủ đề của nhóm.'
+                    rows={3}
+                    className='w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100'
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className='rounded-[24px] border border-slate-200 bg-white p-4'>
+              <p className='text-xs font-semibold uppercase tracking-[0.18em] text-slate-400'>Ảnh bìa và quyền riêng tư</p>
+              
+              <div className='mt-4 space-y-4'>
+                <label className='block space-y-2'>
+                  <span className='text-sm font-medium text-slate-700'>Quyền riêng tư</span>
+                  <select
+                    value={newGroupPrivacy}
+                    onChange={(event) => setNewGroupPrivacy(event.target.value as GroupPrivacy)}
+                    className='h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100'
+                  >
+                    <option value='PUBLIC'>Công khai</option>
+                    <option value='PRIVATE'>Riêng tư</option>
+                  </select>
+                </label>
+
                 <input
-                  placeholder='Mô tả ngắn'
-                  value={newGroupDescription}
-                  onChange={(e) => setNewGroupDescription(e.target.value)}
-                  className='h-11 w-full rounded-2xl border border-slate-200 bg-slate-50/70 px-4 text-sm outline-none ring-0 transition focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100'
-                />
-              <input
-                placeholder='Ảnh bìa nhóm (URL)'
-                value={newGroupCoverUrl}
-                onChange={(e) => setNewGroupCoverUrl(e.target.value)}
-                className='h-11 w-full rounded-2xl border border-slate-200 bg-slate-50/70 px-4 text-sm outline-none ring-0 transition focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100'
-              />
-              <div className='flex items-center gap-2'>
-                <input
-                  ref={coverFileInputRef}
+                  ref={coverInputRef}
                   type='file'
                   accept='image/*'
                   className='hidden'
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
                     if (!file) return
-                    uploadCoverMutation.mutate(file)
-                    e.currentTarget.value = ''
+                    if (newGroupCoverPreviewUrl.startsWith('blob:')) {
+                      URL.revokeObjectURL(newGroupCoverPreviewUrl)
+                    }
+                    setNewGroupCoverFile(file)
+                    setNewGroupCoverUrl('')
+                    setNewGroupCoverPreviewUrl(URL.createObjectURL(file))
+                    event.currentTarget.value = ''
                   }}
                 />
-                <Button
-                  type='button'
-                  variant='secondary'
-                  loading={uploadCoverMutation.isPending}
-                  onClick={() => coverFileInputRef.current?.click()}
-                  className='rounded-xl'
-                >
-                  Thêm tệp
-                </Button>
-                {newGroupCoverUrl && (
-                  <button
-                    type='button'
-                    onClick={() => setNewGroupCoverUrl('')}
-                    className='text-sm text-slate-500 hover:text-slate-700'
-                  >
-                    Xóa ảnh
-                  </button>
-                )}
-              </div>
-              {newGroupCoverUrl && (
-                <img
-                  src={newGroupCoverUrl}
-                  alt='Ảnh bìa nhóm'
-                  className='h-24 w-full rounded-xl border border-slate-200 object-cover'
-                />
-              )}
-              <div className='grid grid-cols-[1fr_140px] gap-2'>
-                <input
-                  placeholder='Chủ đề'
-                  value={newGroupTopic}
-                  onChange={(e) => setNewGroupTopic(e.target.value)}
-                  className='h-11 w-full rounded-2xl border border-slate-200 bg-slate-50/70 px-4 text-sm outline-none ring-0 transition focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100'
-                />
-                <select
-                  value={newGroupPrivacy}
-                  onChange={(e) => setNewGroupPrivacy(e.target.value as GroupPrivacy)}
-                  className='h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100'
-                >
-                  <option value='PUBLIC'>Công khai</option>
-                  <option value='PRIVATE'>Riêng tư</option>
-                </select>
-              </div>
 
-              <div className='pt-1'>
-                <Button
-                  loading={createGroupMutation.isPending}
-                  disabled={!newGroupName.trim()}
-                  onClick={() => createGroupMutation.mutate()}
-                  className='h-11 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_10px_20px_rgba(37,99,235,0.35)] hover:from-blue-500 hover:to-indigo-500'
-                >
-                  Tạo nhóm
-                </Button>
+                <div className='flex flex-wrap gap-2'>
+                  <Button
+                    variant='secondary'
+                    onClick={() => coverInputRef.current?.click()}
+                    className='h-12 !rounded-2xl'
+                  >
+                    Chọn ảnh từ máy
+                  </Button>
+                  {(newGroupCoverUrl || newGroupCoverPreviewUrl) && (
+                    <Button
+                      variant='ghost'
+                      className='h-12 !rounded-2xl'
+                      onClick={() => {
+                        if (newGroupCoverPreviewUrl.startsWith('blob:')) {
+                          URL.revokeObjectURL(newGroupCoverPreviewUrl)
+                        }
+                        setNewGroupCoverFile(null)
+                        setNewGroupCoverUrl('')
+                        setNewGroupCoverPreviewUrl('')
+                      }}
+                    >
+                      Xóa ảnh
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
+
+          <div className='rounded-[28px] border border-slate-200 bg-[linear-gradient(180deg,#f8fbff_0%,#eef4ff_100%)] p-4 sm:p-5'>
+            <div className='flex items-center justify-between'>
+              <div>
+                <p className='text-xs font-semibold uppercase tracking-[0.18em] text-slate-400'>Xem trước</p>
+                <h3 className='mt-1 text-lg font-bold text-slate-950'>Thẻ nhóm</h3>
+              </div>
+              <span className='rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-500 shadow-sm'>
+                {formatPrivacy(newGroupPrivacy)}
+              </span>
+            </div>
+
+            <div className='mt-4 overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.08)]'>
+              <div className='relative h-44 bg-slate-100'>
+                {createGroupCoverPreview ? (
+                  <img src={createGroupCoverPreview} alt='Xem trước ảnh bìa nhóm' className='h-full w-full object-cover' />
+                ) : (
+                  <div className='flex h-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.18),transparent_45%),linear-gradient(135deg,#e2e8f0,#f8fafc)] text-sm text-slate-400'>
+                    Chưa có ảnh bìa
+                  </div>
+                )}
+                <div className='absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-950/10 to-transparent' />
+                <div className='absolute inset-x-0 bottom-0 p-4 text-white'>
+                  <div className='text-xs font-semibold uppercase tracking-[0.18em] text-slate-200'>Nhóm học tập</div>
+                  <div className='mt-1 line-clamp-2 text-2xl font-bold'>{newGroupName.trim() || 'Nhóm mới'}</div>
+                </div>
+              </div>
+
+              <div className='space-y-3 p-4'>
+                <p className='line-clamp-4 text-sm leading-6 text-slate-600'>
+                  {newGroupDescription.trim() || 'Mô tả mục đích của nhóm để thành viên mới hiểu nhanh nội dung và cách hoạt động.'}
+                </p>
+                <div className='flex items-center justify-between text-xs font-semibold uppercase tracking-[0.14em] text-slate-400'>
+                  <span>{formatPrivacy(newGroupPrivacy)}</span>
+                  <span>{newGroupCoverFile ? 'Đã chọn ảnh' : 'Chưa có ảnh'}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className='mt-4 rounded-[24px] border border-blue-100 bg-white/80 p-4 text-sm text-slate-600'>
+              Ảnh bìa từ máy chỉ được tải lên khi bạn bấm <span className='font-semibold text-slate-900'>Tạo nhóm</span>. Nếu hủy, sẽ không phát sinh file rác trên Cloudinary.
+            </div>
+          </div>
         </div>
-      )}
+      </Modal>
+
+      <Modal
+        open={showRequestsModal}
+        onClose={() => setShowRequestsModal(false)}
+        title='Yêu cầu tham gia đang chờ duyệt'
+        size='2xl'
+      >
+        <div className='space-y-3'>
+          {ownerJoinRequestsQuery.isLoading ? (
+            <p className='text-sm text-slate-500'>Đang tải yêu cầu...</p>
+          ) : pendingRequests.length === 0 ? (
+            <p className='rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500'>
+              Hiện chưa có yêu cầu nào cần duyệt.
+            </p>
+          ) : (
+            pendingRequests.map((entry) => (
+              <article
+                key={`${entry.groupId}-${entry.requester.id}-${entry.requestedAt}`}
+                className='flex flex-col gap-3 rounded-[24px] border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between'
+              >
+                <div className='min-w-0'>
+                  <div className='text-xs font-semibold uppercase tracking-[0.14em] text-slate-400'>{entry.groupName}</div>
+                  <div className='mt-1 text-lg font-bold text-slate-950'>{entry.requester.displayName}</div>
+                  <div className='text-sm text-slate-500'>{new Date(entry.requestedAt).toLocaleString()}</div>
+                </div>
+
+                <div className='flex gap-2'>
+                  <Button
+                    loading={approveRequestMutation.isPending}
+                    onClick={() => approveRequestMutation.mutate({ groupId: entry.groupId, userId: entry.requester.id })}
+                  >
+                    Duyệt
+                  </Button>
+                  <Button
+                    variant='secondary'
+                    loading={rejectRequestMutation.isPending}
+                    onClick={() => rejectRequestMutation.mutate({ groupId: entry.groupId, userId: entry.requester.id })}
+                  >
+                    Từ chối
+                  </Button>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        open={!!confirmLeaveGroup}
+        onClose={() => setConfirmLeaveGroup(null)}
+        onConfirm={() => {
+          if (confirmLeaveGroup) {
+            leaveMutation.mutate(confirmLeaveGroup.id, {
+              onSettled: () => setConfirmLeaveGroup(null),
+            })
+          }
+        }}
+        title='Xác nhận rời nhóm?'
+        description={`Bạn có chắc chắn muốn rời nhóm ${confirmLeaveGroup?.name}?`}
+        confirmText='Rời nhóm'
+        cancelText='Hủy'
+        tone='warning'
+        loading={leaveMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={!!confirmDeleteGroup}
+        onClose={() => setConfirmDeleteGroup(null)}
+        onConfirm={() => {
+          if (confirmDeleteGroup) {
+            deleteGroupMutation.mutate(confirmDeleteGroup.id, {
+              onSettled: () => setConfirmDeleteGroup(null),
+            })
+          }
+        }}
+        title='Xác nhận xóa nhóm?'
+        description={`Bạn có chắc chắn muốn xóa nhóm ${confirmDeleteGroup?.name}? Hành động này không thể hoàn tác.`}
+        confirmText='Xóa nhóm'
+        cancelText='Hủy'
+        tone='danger'
+        loading={deleteGroupMutation.isPending}
+      />
     </>
   )
 }

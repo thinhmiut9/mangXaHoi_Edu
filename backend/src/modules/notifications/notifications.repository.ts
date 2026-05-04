@@ -26,7 +26,13 @@ export const notificationsRepository = {
        })
        CREATE (recipient)-[:HAS_NOTIFICATION]->(n)
        RETURN n`,
-      { notificationId: uuidv4(), ...data, now }
+      { 
+        notificationId: uuidv4(), 
+        ...data, 
+        entityId: data.entityId ?? null,
+        entityType: data.entityType ?? null,
+        now 
+      }
     )
     return result!.n.properties
   },

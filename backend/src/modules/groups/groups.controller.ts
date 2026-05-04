@@ -69,6 +69,18 @@ export const groupsController = {
     } catch (err) { next(err) }
   },
 
+  async assignRole(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { role } = req.body
+      if (!role) {
+        res.status(400).json({ success: false, message: 'Thiếu thông tin quyền' })
+        return
+      }
+      await groupsService.assignRole(String(req.params.id), req.user!.userId, String(req.params.userId), role)
+      sendSuccess(res, null, 'Đã cập nhật quyền thành viên')
+    } catch (err) { next(err) }
+  },
+
   async getJoinRequests(req: Request, res: Response, next: NextFunction) {
     try {
       const requests = await groupsService.getJoinRequests(String(req.params.id), req.user!.userId)

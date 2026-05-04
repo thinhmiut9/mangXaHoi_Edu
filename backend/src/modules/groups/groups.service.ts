@@ -49,6 +49,8 @@ export const groupsService = {
           senderId: userId,
           type: 'GROUP_REQUEST',
           content: 'đã gửi yêu cầu tham gia nhóm của bạn.',
+          entityId: groupId,
+          entityType: 'GROUP',
         })
       }
       return { status: 'REQUESTED' }
@@ -85,6 +87,16 @@ export const groupsService = {
     await groupsRepository.removeMember(groupId, memberId)
   },
 
+  async assignRole(groupId: string, ownerId: string, memberId: string, role: string) {
+    const isOwner = await groupsRepository.isOwner(groupId, ownerId)
+    if (!isOwner) throw new AppError('Chỉ chủ nhóm mới có thể đổi quyền', 403, 'FORBIDDEN')
+
+    const isMember = await groupsRepository.isMember(groupId, memberId)
+    if (!isMember) throw new AppError('Người dùng không phải thành viên nhóm', 404, 'MEMBER_NOT_FOUND')
+
+    await groupsRepository.assignRole(groupId, memberId, role)
+  },
+
   async getJoinRequests(groupId: string, ownerId: string, page = 1, limit = 20) {
     const isOwner = await groupsRepository.isOwner(groupId, ownerId)
     if (!isOwner) throw new AppError('Chỉ chủ nhóm mới có thể xem yêu cầu duyệt', 403, 'FORBIDDEN')
@@ -112,6 +124,8 @@ export const groupsService = {
       senderId: ownerId,
       type: 'GROUP_INVITE',
       content: 'đã duyệt yêu cầu tham gia nhóm của bạn.',
+      entityId: groupId,
+      entityType: 'GROUP',
     })
   },
 

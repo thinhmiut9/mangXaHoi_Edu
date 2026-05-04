@@ -6,6 +6,9 @@ export interface DocumentRow {
   title: string
   fileName: string
   fileUrl: string
+  fileHash?: string
+  uploadSourceName?: string
+  duplicateOf?: string
   previewUrl?: string
   fileType: 'PDF' | 'DOC' | 'PPT'
   subject?: string
@@ -24,12 +27,18 @@ export interface DocumentRow {
   uploaderAvatar?: string
   createdAt: string
   updatedAt: string
+  reviewedBy?: string
+  reviewedAt?: string
+  moderationNote?: string
 }
 
 interface CreateDocumentData extends CreateDocumentDto {
   documentId: string
   fileName: string
   fileUrl: string
+  fileHash: string
+  uploadSourceName?: string
+  duplicateOf?: string | null
   fileType: 'PDF' | 'DOC' | 'PPT'
   uploaderId: string
   createdAt: string
@@ -50,7 +59,7 @@ function toSafeNumber(value: unknown): number {
 function buildWhere(query: ListDocumentsQueryDto, viewerId: string) {
   const where: string[] = [
     `coalesce(d.status, 'ACTIVE') = 'ACTIVE'`,
-    `(d.uploaderId = $viewerId OR coalesce(d.visibility, 'PUBLIC') = 'PUBLIC')`,
+    `coalesce(d.visibility, 'PUBLIC') = 'PUBLIC'`,
   ]
   const params: Record<string, unknown> = { viewerId }
 
@@ -107,6 +116,9 @@ export const documentsRepository = {
          title: $title,
          fileName: $fileName,
          fileUrl: $fileUrl,
+         fileHash: $fileHash,
+         uploadSourceName: $uploadSourceName,
+         duplicateOf: $duplicateOf,
          previewUrl: $fileUrl,
          fileType: $fileType,
          subject: $subject,
@@ -116,18 +128,22 @@ export const documentsRepository = {
          description: $description,
          tags: $tags,
          visibility: $visibility,
-         status: 'ACTIVE',
+         status: 'PENDING',
          viewsCount: 0,
          downloadsCount: 0,
          uploaderId: $uploaderId,
          createdAt: $createdAt,
-         updatedAt: $updatedAt
+         updatedAt: $updatedAt,
+         reviewedBy: null,
+         reviewedAt: null,
+         moderationNote: null
        })
        MERGE (u)-[:UPLOADED_DOCUMENT]->(d)
        RETURN d {
          .documentId, .title, .fileName, .fileUrl, .previewUrl, .fileType, .subject,
          .school, .major, .cohort, .description, .tags, .visibility, .status,
-         .viewsCount, .downloadsCount, .uploaderId, .createdAt, .updatedAt
+         .viewsCount, .downloadsCount, .uploaderId, .createdAt, .updatedAt,
+         .reviewedBy, .reviewedAt, .moderationNote
        } AS d,
        u.displayName AS uploaderName,
        u.avatarUrl AS uploaderAvatar`,
@@ -167,6 +183,7 @@ export const documentsRepository = {
          .documentId, .title, .fileName, .fileUrl, .previewUrl, .fileType, .subject,
          .school, .major, .cohort, .description, .tags, .visibility, .status,
          .viewsCount, .downloadsCount, .uploaderId, .createdAt, .updatedAt,
+         .reviewedBy, .reviewedAt, .moderationNote,
          isSaved: EXISTS { (:User {userId: $viewerId})-[:SAVED_DOCUMENT]->(d) },
          uploaderName: u.displayName,
          uploaderAvatar: u.avatarUrl
@@ -198,14 +215,13 @@ export const documentsRepository = {
          .documentId, .title, .fileName, .fileUrl, .previewUrl, .fileType, .subject,
          .school, .major, .cohort, .description, .tags, .visibility, .status,
          .viewsCount, .downloadsCount, .uploaderId, .createdAt, .updatedAt,
+         .reviewedBy, .reviewedAt, .moderationNote,
          isSaved: EXISTS { (:User {userId: $viewerId})-[:SAVED_DOCUMENT]->(d) },
          uploaderName: u.displayName,
          uploaderAvatar: u.avatarUrl
-       } AS row`
-      ,
+       } AS row`,
       { viewerId, documentId }
     )
-
     return result?.row ?? null
   },
 
@@ -225,13 +241,13 @@ export const documentsRepository = {
          .documentId, .title, .fileName, .fileUrl, .previewUrl, .fileType, .subject,
          .school, .major, .cohort, .description, .tags, .visibility, .status,
          .viewsCount, .downloadsCount, .uploaderId, .createdAt, .updatedAt,
+         .reviewedBy, .reviewedAt, .moderationNote,
          isSaved: EXISTS { (:User {userId: $viewerId})-[:SAVED_DOCUMENT]->(d) },
          uploaderName: u.displayName,
          uploaderAvatar: u.avatarUrl
        } AS row`,
       { viewerId, documentId, now: new Date().toISOString() }
     )
-
     return result?.row ?? null
   },
 
@@ -247,13 +263,13 @@ export const documentsRepository = {
          .documentId, .title, .fileName, .fileUrl, .previewUrl, .fileType, .subject,
          .school, .major, .cohort, .description, .tags, .visibility, .status,
          .viewsCount, .downloadsCount, .uploaderId, .createdAt, .updatedAt,
+         .reviewedBy, .reviewedAt, .moderationNote,
          isSaved: EXISTS { (:User {userId: $viewerId})-[:SAVED_DOCUMENT]->(d) },
          uploaderName: u.displayName,
          uploaderAvatar: u.avatarUrl
        } AS row`,
       { viewerId, documentId, now: new Date().toISOString() }
     )
-
     return result?.row ?? null
   },
 
@@ -273,7 +289,6 @@ export const documentsRepository = {
        RETURN existing IS NULL AS saved`,
       { documentId, userId }
     )
-
     return result ?? { saved: false }
   },
 
@@ -291,13 +306,13 @@ export const documentsRepository = {
          .documentId, .title, .fileName, .fileUrl, .previewUrl, .fileType, .subject,
          .school, .major, .cohort, .description, .tags, .visibility, .status,
          .viewsCount, .downloadsCount, .uploaderId, .createdAt, .updatedAt,
+         .reviewedBy, .reviewedAt, .moderationNote,
          isSaved: true,
          uploaderName: u.displayName,
          uploaderAvatar: u.avatarUrl
        } AS row`,
       { userId, skip, limit }
     )
-
     const countRow = await runQueryOne<{ total: number }>(
       `MATCH (:User {userId: $userId})-[:SAVED_DOCUMENT]->(d:Document)
        WHERE coalesce(d.status, 'ACTIVE') = 'ACTIVE'
@@ -305,7 +320,6 @@ export const documentsRepository = {
        RETURN count(d) AS total`,
       { userId }
     )
-
     return {
       rows: rows.map((item) => item.row),
       total: toSafeNumber(countRow?.total),
@@ -324,22 +338,155 @@ export const documentsRepository = {
          .documentId, .title, .fileName, .fileUrl, .previewUrl, .fileType, .subject,
          .school, .major, .cohort, .description, .tags, .visibility, .status,
          .viewsCount, .downloadsCount, .uploaderId, .createdAt, .updatedAt,
+         .reviewedBy, .reviewedAt, .moderationNote,
          isSaved: EXISTS { (:User {userId: $userId})-[:SAVED_DOCUMENT]->(d) },
          uploaderName: u.displayName,
          uploaderAvatar: u.avatarUrl
        } AS row`,
       { userId, skip, limit }
     )
-
     const countRow = await runQueryOne<{ total: number }>(
       `MATCH (:User {userId: $userId})-[:UPLOADED_DOCUMENT]->(d:Document)
        RETURN count(d) AS total`,
       { userId }
     )
-
     return {
       rows: rows.map((item) => item.row),
       total: toSafeNumber(countRow?.total),
     }
+  },
+
+  async listForAdmin(status: 'ALL' | 'PENDING' | 'ACTIVE' | 'REJECTED', skip: number, limit: number) {
+    const whereClause = status === 'ALL' ? '' : `WHERE coalesce(d.status, 'PENDING') = $status`
+    const rows = await runQuery<{ row: DocumentRow }>(
+      `MATCH (d:Document)
+       OPTIONAL MATCH (u:User {userId: d.uploaderId})
+       ${whereClause}
+       WITH d, u
+       ORDER BY
+         CASE WHEN coalesce(d.status, 'PENDING') = 'PENDING' THEN 0 ELSE 1 END,
+         coalesce(toString(d.createdAt), '') DESC
+       SKIP toInteger($skip)
+       LIMIT toInteger($limit)
+       RETURN d {
+         .documentId, .title, .fileName, .fileUrl, .fileHash, .uploadSourceName, .duplicateOf, .previewUrl, .fileType, .subject,
+         .school, .major, .cohort, .description, .tags, .visibility, .status,
+         .viewsCount, .downloadsCount, .uploaderId, .createdAt, .updatedAt,
+         .reviewedBy, .reviewedAt, .moderationNote,
+         uploaderName: u.displayName,
+         uploaderAvatar: u.avatarUrl
+       } AS row`,
+      { status, skip, limit }
+    )
+    const countRow = await runQueryOne<{ total: number }>(
+      `MATCH (d:Document)
+       ${whereClause}
+       RETURN count(d) AS total`,
+      { status }
+    )
+    return {
+      rows: rows.map((item) => item.row),
+      total: toSafeNumber(countRow?.total),
+    }
+  },
+
+  async findById(documentId: string): Promise<DocumentRow | null> {
+    const result = await runQueryOne<{ row: DocumentRow }>(
+      `MATCH (d:Document {documentId: $documentId})
+       OPTIONAL MATCH (u:User {userId: d.uploaderId})
+       RETURN d {
+         .documentId, .title, .fileName, .fileUrl, .fileHash, .uploadSourceName, .duplicateOf, .previewUrl, .fileType, .subject,
+         .school, .major, .cohort, .description, .tags, .visibility, .status,
+         .viewsCount, .downloadsCount, .uploaderId, .createdAt, .updatedAt,
+         .reviewedBy, .reviewedAt, .moderationNote,
+         uploaderName: u.displayName,
+         uploaderAvatar: u.avatarUrl
+       } AS row`,
+      { documentId }
+    )
+    return result?.row ?? null
+  },
+
+  async findOwnedById(userId: string, documentId: string): Promise<DocumentRow | null> {
+    const result = await runQueryOne<{ row: DocumentRow }>(
+      `MATCH (:User {userId: $userId})-[:UPLOADED_DOCUMENT]->(d:Document {documentId: $documentId})
+       OPTIONAL MATCH (u:User {userId: d.uploaderId})
+       RETURN d {
+         .documentId, .title, .fileName, .fileUrl, .previewUrl, .fileType, .subject,
+         .school, .major, .cohort, .description, .tags, .visibility, .status,
+         .viewsCount, .downloadsCount, .uploaderId, .createdAt, .updatedAt,
+         .reviewedBy, .reviewedAt, .moderationNote,
+         uploaderName: u.displayName,
+         uploaderAvatar: u.avatarUrl
+       } AS row`,
+      { userId, documentId }
+    )
+    return result?.row ?? null
+  },
+
+  async findByFileHash(fileHash: string): Promise<DocumentRow | null> {
+    const result = await runQueryOne<{ row: DocumentRow }>(
+      `MATCH (d:Document {fileHash: $fileHash})
+       OPTIONAL MATCH (u:User {userId: d.uploaderId})
+       RETURN d {
+         .documentId, .title, .fileName, .fileUrl, .fileHash, .uploadSourceName, .duplicateOf, .previewUrl, .fileType, .subject,
+         .school, .major, .cohort, .description, .tags, .visibility, .status,
+         .viewsCount, .downloadsCount, .uploaderId, .createdAt, .updatedAt,
+         .reviewedBy, .reviewedAt, .moderationNote,
+         uploaderName: u.displayName,
+         uploaderAvatar: u.avatarUrl
+       } AS row
+       ORDER BY
+         CASE coalesce(d.status, 'PENDING')
+           WHEN 'ACTIVE' THEN 0
+           WHEN 'PENDING' THEN 1
+           ELSE 2
+         END,
+         coalesce(toString(d.createdAt), '') DESC
+       LIMIT 1`,
+      { fileHash }
+    )
+    return result?.row ?? null
+  },
+
+  async updateStatus(
+    documentId: string,
+    status: 'ACTIVE' | 'REJECTED',
+    options: { reviewedBy: string; moderationNote?: string }
+  ): Promise<DocumentRow | null> {
+    const now = new Date().toISOString()
+    const result = await runQueryOne<{ row: DocumentRow }>(
+      `MATCH (d:Document {documentId: $documentId})
+       OPTIONAL MATCH (u:User {userId: d.uploaderId})
+       SET d.status = $status,
+           d.updatedAt = $now,
+           d.reviewedBy = $reviewedBy,
+           d.reviewedAt = $now,
+           d.moderationNote = $moderationNote
+       RETURN d {
+         .documentId, .title, .fileName, .fileUrl, .previewUrl, .fileType, .subject,
+         .school, .major, .cohort, .description, .tags, .visibility, .status,
+         .viewsCount, .downloadsCount, .uploaderId, .createdAt, .updatedAt,
+         .reviewedBy, .reviewedAt, .moderationNote,
+         uploaderName: u.displayName,
+         uploaderAvatar: u.avatarUrl
+       } AS row`,
+      {
+        documentId,
+        status,
+        now,
+        reviewedBy: options.reviewedBy,
+        moderationNote: options.moderationNote?.trim() || null,
+      }
+    )
+    return result?.row ?? null
+  },
+
+  async delete(documentId: string): Promise<void> {
+    await runQuery(
+      `MATCH (d:Document {documentId: $documentId})
+       DETACH DELETE d`,
+      { documentId }
+    )
   },
 }

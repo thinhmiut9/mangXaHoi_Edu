@@ -1,6 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { documentsApi, type DocumentFileType } from '@/api/documents'
 import { extractError } from '@/api/client'
@@ -66,6 +65,8 @@ type FilterOption = {
   label: string
 }
 
+type UploadSuggestField = 'subject' | 'major' | 'school' | 'cohort'
+
 function FilterDropdown({
   value,
   options,
@@ -108,8 +109,8 @@ function FilterDropdown({
               </button>
             ))}
           </div>
-        </div>
-      )}
+          </div>
+        )}
     </div>
   )
 }
@@ -148,9 +149,14 @@ export default function DocumentsPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [selectedFileName, setSelectedFileName] = useState('')
   const [uploadError, setUploadError] = useState('')
-  const [isSchoolSuggestOpen, setIsSchoolSuggestOpen] = useState(false)
-  const schoolSuggestRef = useRef<HTMLDivElement | null>(null)
-  const schoolSuggestAutoCloseRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [openUploadSuggest, setOpenUploadSuggest] = useState<UploadSuggestField | null>(null)
+  const uploadSuggestRefs = useRef<Record<UploadSuggestField, HTMLDivElement | null>>({
+    subject: null,
+    major: null,
+    school: null,
+    cohort: null,
+  })
+  const uploadSuggestAutoCloseRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [uploadData, setUploadData] = useState({
     title: '',
     subject: '',
@@ -159,7 +165,6 @@ export default function DocumentsPage() {
     cohort: '',
     tags: '',
     type: 'PDF' as DocumentFileType,
-    visibility: 'PUBLIC' as 'PUBLIC' | 'FRIENDS' | 'PRIVATE',
   })
 
   const shortenedFileName = useMemo(() => {
@@ -221,6 +226,7 @@ export default function DocumentsPage() {
         queryClient.invalidateQueries({ queryKey: ['documents'] }),
         queryClient.invalidateQueries({ queryKey: ['documents-library'] }),
         queryClient.invalidateQueries({ queryKey: ['documents-facets'] }),
+        queryClient.invalidateQueries({ queryKey: ['documents-mine'] }),
       ])
       setUploadData({
         title: '',
@@ -230,12 +236,13 @@ export default function DocumentsPage() {
         cohort: '',
         tags: '',
         type: 'PDF',
-        visibility: 'PUBLIC',
       })
       setSelectedFile(null)
       setSelectedFileName('')
       setUploadError('')
       setOpenUpload(false)
+      toast.success('Tài liệu đã được gửi lên và đang chờ admin duyệt')
+      navigate('/documents/mine')
     },
   })
 
@@ -275,33 +282,36 @@ export default function DocumentsPage() {
     ])
   }
 
-  const allDocuments = data?.data ?? []
-  const schoolOptions = useMemo(() => {
+  const allDocuments = useMemo(
+    () => (data?.data ?? []).filter((doc) => doc.status === 'ACTIVE'),
+    [data?.data]
+  )
+  const collectUploadOptions = (field: UploadSuggestField) => {
     const values = [...(facetData?.data ?? []), ...allDocuments]
-      .map((doc) => doc.school)
+      .map((doc) => doc[field])
       .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
 
     return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b))
-  }, [allDocuments, facetData?.data])
-  const schoolSuggestions = useMemo(() => {
-    const keyword = uploadData.school.trim().toLowerCase()
-    const filtered = !keyword
-      ? schoolOptions
-      : schoolOptions.filter((school) => school.toLowerCase().includes(keyword))
-    return filtered.slice(0, 8)
-  }, [schoolOptions, uploadData.school])
-  const hasExactSchoolMatch = useMemo(() => {
-    const normalized = uploadData.school.trim().toLowerCase()
-    if (!normalized) return false
-    return schoolOptions.some((school) => school.toLowerCase() === normalized)
-  }, [schoolOptions, uploadData.school])
+  }
+  const subjectOptions = useMemo(() => collectUploadOptions('subject'), [allDocuments, facetData?.data])
   const majorOptions = useMemo(() => {
-    const values = [...(facetData?.data ?? []), ...allDocuments]
-      .map((doc) => doc.major)
-      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-
-    return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b))
+    return collectUploadOptions('major')
   }, [allDocuments, facetData?.data])
+  const schoolOptions = useMemo(() => {
+    return collectUploadOptions('school')
+  }, [allDocuments, facetData?.data])
+  const cohortOptions = useMemo(() => {
+    return collectUploadOptions('cohort')
+  }, [allDocuments, facetData?.data])
+  const uploadSuggestOptions = useMemo<Record<UploadSuggestField, string[]>>(
+    () => ({
+      subject: subjectOptions,
+      major: majorOptions,
+      school: schoolOptions,
+      cohort: cohortOptions,
+    }),
+    [cohortOptions, majorOptions, schoolOptions, subjectOptions]
+  )
   const schoolFilterOptions = useMemo<FilterOption[]>(
     () => [{ value: 'ALL', label: 'Lọc theo trường' }, ...schoolOptions.map((school) => ({ value: school, label: school }))],
     [schoolOptions]
@@ -443,17 +453,18 @@ export default function DocumentsPage() {
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as Node | null
-      if (!schoolSuggestRef.current?.contains(target)) {
-        setIsSchoolSuggestOpen(false)
+      if (!openUploadSuggest) return
+      if (!uploadSuggestRefs.current[openUploadSuggest]?.contains(target)) {
+        setOpenUploadSuggest(null)
       }
     }
 
     document.addEventListener('pointerdown', handlePointerDown)
     return () => document.removeEventListener('pointerdown', handlePointerDown)
-  }, [])
+  }, [openUploadSuggest])
 
   useEffect(() => {
-    if (!openUpload) setIsSchoolSuggestOpen(false)
+    if (!openUpload) setOpenUploadSuggest(null)
   }, [openUpload])
 
   useEffect(() => {
@@ -467,24 +478,24 @@ export default function DocumentsPage() {
   }, [shareDoc, shareUserCandidates, shareUserId])
 
   useEffect(() => {
-    if (schoolSuggestAutoCloseRef.current) {
-      clearTimeout(schoolSuggestAutoCloseRef.current)
-      schoolSuggestAutoCloseRef.current = null
+    if (uploadSuggestAutoCloseRef.current) {
+      clearTimeout(uploadSuggestAutoCloseRef.current)
+      uploadSuggestAutoCloseRef.current = null
     }
 
-    if (!isSchoolSuggestOpen) return
+    if (!openUploadSuggest) return
 
-    schoolSuggestAutoCloseRef.current = setTimeout(() => {
-      setIsSchoolSuggestOpen(false)
+    uploadSuggestAutoCloseRef.current = setTimeout(() => {
+      setOpenUploadSuggest(null)
     }, 2500)
 
     return () => {
-      if (schoolSuggestAutoCloseRef.current) {
-        clearTimeout(schoolSuggestAutoCloseRef.current)
-        schoolSuggestAutoCloseRef.current = null
+      if (uploadSuggestAutoCloseRef.current) {
+        clearTimeout(uploadSuggestAutoCloseRef.current)
+        uploadSuggestAutoCloseRef.current = null
       }
     }
-  }, [isSchoolSuggestOpen, uploadData.school])
+  }, [openUploadSuggest, uploadData])
 
   const clearFilters = () => {
     setSearchText('')
@@ -516,8 +527,103 @@ export default function DocumentsPage() {
       major: uploadData.major,
       cohort: uploadData.cohort,
       tags: uploadData.tags,
-      visibility: uploadData.visibility,
     })
+  }
+
+  const renderUploadSuggestInput = ({
+    field,
+    label,
+    placeholder,
+  }: {
+    field: UploadSuggestField
+    label: string
+    placeholder: string
+  }) => {
+    const value = uploadData[field]
+    const options = uploadSuggestOptions[field]
+    const keyword = value.trim().toLowerCase()
+    const suggestions = (!keyword ? options : options.filter((option) => option.toLowerCase().includes(keyword))).slice(0, 8)
+    const hasExactMatch = !!keyword && options.some((option) => option.toLowerCase() === keyword)
+    const isOpen = openUploadSuggest === field
+
+    return (
+      <div
+        className='relative min-w-0'
+        ref={(node) => {
+          uploadSuggestRefs.current[field] = node
+        }}
+      >
+        <span className='mb-1 block text-sm font-semibold text-slate-700'>{label}</span>
+        <input
+          value={value}
+          onFocus={() => setOpenUploadSuggest(field)}
+          onBlur={() => {
+            window.setTimeout(() => setOpenUploadSuggest((prev) => (prev === field ? null : prev)), 120)
+          }}
+          onChange={(e) => {
+            const nextValue = e.target.value
+            setUploadData((prev) => ({ ...prev, [field]: nextValue }))
+            setOpenUploadSuggest(field)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setOpenUploadSuggest((prev) => (prev === field ? null : prev))
+            if (e.key === 'Enter' || e.key === 'Tab') {
+              setUploadData((prev) => ({ ...prev, [field]: prev[field].trim() }))
+              setOpenUploadSuggest((prev) => (prev === field ? null : prev))
+            }
+          }}
+          className='h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-300'
+          placeholder={placeholder}
+          autoComplete='off'
+        />
+
+        {isOpen && (
+          <div className='absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg'>
+            <div className='max-h-44 overflow-y-auto py-1'>
+              {suggestions.map((option) => (
+                <button
+                  key={option}
+                  type='button'
+                  onPointerDown={(e) => e.preventDefault()}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setUploadData((prev) => ({ ...prev, [field]: option }))
+                    setOpenUploadSuggest(null)
+                  }}
+                  className='flex min-h-10 w-full items-center px-3 text-left text-sm text-slate-700 transition hover:bg-slate-50 active:bg-blue-50'
+                >
+                  <span className='truncate'>{option}</span>
+                </button>
+              ))}
+
+              {value.trim() && !hasExactMatch && (
+                <button
+                  type='button'
+                  onPointerDown={(e) => e.preventDefault()}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setUploadData((prev) => ({ ...prev, [field]: prev[field].trim() }))
+                    setOpenUploadSuggest(null)
+                  }}
+                  className='flex min-h-10 w-full items-center border-t border-slate-100 px-3 text-left text-sm font-semibold text-blue-600 transition hover:bg-blue-50 active:bg-blue-100'
+                >
+                  <span className='truncate'>Dùng giá trị mới: {value.trim()}</span>
+                </button>
+              )}
+
+              {!suggestions.length && !value.trim() && (
+                <div className='px-3 py-2 text-sm text-slate-400'>Nhập để tìm hoặc thêm mới...</div>
+              )}
+            </div>
+            {value.trim() && !hasExactMatch && (
+              <div className='border-t border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-500'>
+                Nhấn Enter hoặc rời ô để dùng giá trị bạn vừa nhập.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
   }
 
   const handleOpenOriginal = async () => {
@@ -1040,127 +1146,22 @@ export default function DocumentsPage() {
                 className='h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-300'
                 placeholder='VD: Đề cương CSDL cuối kỳ'
               />
-            </label>
-
-            <label>
-              <span className='mb-1 block text-sm font-semibold text-slate-700'>Môn học</span>
-              <input
-                value={uploadData.subject}
-                onChange={(e) => setUploadData((prev) => ({ ...prev, subject: e.target.value }))}
-                className='h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-300'
-                placeholder='Cơ sở dữ liệu'
-              />
-            </label>
-
-            <label>
-              <span className='mb-1 block text-sm font-semibold text-slate-700'>Ngành</span>
-              <input
-                value={uploadData.major}
-                onChange={(e) => setUploadData((prev) => ({ ...prev, major: e.target.value }))}
-                className='h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-300'
-                placeholder='CNTT'
-              />
-            </label>
-
-            <div className='relative min-w-0' ref={schoolSuggestRef}>
-              <span className='mb-1 block text-sm font-semibold text-slate-700'>Trường</span>
-              <input
-                value={uploadData.school}
-                onFocus={() => setIsSchoolSuggestOpen(true)}
-                onBlur={() => {
-                  window.setTimeout(() => setIsSchoolSuggestOpen(false), 120)
-                }}
-                onChange={(e) => {
-                  setUploadData((prev) => ({ ...prev, school: e.target.value }))
-                  setIsSchoolSuggestOpen(true)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') setIsSchoolSuggestOpen(false)
-                }}
-                className='h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-300'
-                placeholder='ĐH Bách Khoa'
-                autoComplete='off'
-              />
-
-              {isSchoolSuggestOpen && (
-                <div className='absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg'>
-                  <div className='max-h-44 overflow-y-auto py-1'>
-                    {schoolSuggestions.map((school) => (
-                      <button
-                        key={school}
-                        type='button'
-                        onPointerDown={(e) => e.preventDefault()}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => {
-                          setUploadData((prev) => ({ ...prev, school }))
-                          setIsSchoolSuggestOpen(false)
-                        }}
-                        className='flex min-h-10 w-full items-center px-3 text-left text-sm text-slate-700 transition hover:bg-slate-50 active:bg-blue-50'
-                      >
-                        <span className='truncate'>{school}</span>
-                      </button>
-                    ))}
-
-                    {uploadData.school.trim() && !hasExactSchoolMatch && (
-                      <button
-                        type='button'
-                        onPointerDown={(e) => e.preventDefault()}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => {
-                          setUploadData((prev) => ({ ...prev, school: prev.school.trim() }))
-                          setIsSchoolSuggestOpen(false)
-                        }}
-                        className='flex min-h-10 w-full items-center border-t border-slate-100 px-3 text-left text-sm font-semibold text-blue-600 transition hover:bg-blue-50 active:bg-blue-100'
-                      >
-                        <span className='truncate'>Sử dụng: {uploadData.school.trim()}</span>
-                      </button>
-                    )}
-
-                    {!schoolSuggestions.length && !uploadData.school.trim() && (
-                      <div className='px-3 py-2 text-sm text-slate-400'>Nhập để tìm trường...</div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <label>
-              <span className='mb-1 block text-sm font-semibold text-slate-700'>Khóa</span>
-              <input
-                value={uploadData.cohort}
-                onChange={(e) => setUploadData((prev) => ({ ...prev, cohort: e.target.value }))}
-                className='h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-300'
-                placeholder='K23'
-              />
-            </label>
-
+            </label>
+            {renderUploadSuggestInput({ field: 'subject', label: 'Môn học', placeholder: 'Cơ sở dữ liệu' })}
+            {renderUploadSuggestInput({ field: 'major', label: 'Ngành', placeholder: 'CNTT' })}
+            {renderUploadSuggestInput({ field: 'school', label: 'Trường', placeholder: 'ĐH Bách Khoa' })}
+            {renderUploadSuggestInput({ field: 'cohort', label: 'Khóa', placeholder: 'K23' })}
             <label>
               <span className='mb-1 block text-sm font-semibold text-slate-700'>Loại file</span>
-              <select
-                value={uploadData.type}
-                onChange={(e) => setUploadData((prev) => ({ ...prev, type: e.target.value as DocumentFileType }))}
-                className='doc-upload-select h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-300'
-              >
-                <option value='PDF'>PDF</option>
-                <option value='DOC'>DOC</option>
-                <option value='PPT'>PPT</option>
-              </select>
+              <input
+                value={selectedFile ? uploadData.type : ''}
+                readOnly
+                className='h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-600 outline-none'
+                placeholder='Tự động theo file đã chọn'
+              />
             </label>
 
             <label>
-              <span className='mb-1 block text-sm font-semibold text-slate-700'>Hiển thị</span>
-              <select
-                value={uploadData.visibility}
-                onChange={(e) => setUploadData((prev) => ({ ...prev, visibility: e.target.value as 'PUBLIC' | 'FRIENDS' | 'PRIVATE' }))}
-                className='doc-upload-select h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-300'
-              >
-                <option value='PUBLIC'>Công khai</option>
-                <option value='FRIENDS'>Bạn bè</option>
-                <option value='PRIVATE'>Riêng tư</option>
-              </select>
-            </label>
-
-            <label className='sm:col-span-2'>
               <span className='mb-1 block text-sm font-semibold text-slate-700'>Tags</span>
               <input
                 value={uploadData.tags}
@@ -1281,4 +1282,7 @@ export default function DocumentsPage() {
     </>
   )
 }
+
+
+
 

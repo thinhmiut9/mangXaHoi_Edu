@@ -261,14 +261,30 @@ export const chatRepository = {
     }
   },
 
-  async deleteConversation(conversationRef: string, userId: string): Promise<void> {
-    await runQuery(
+  async deleteConversation(conversationRef: string, userId: string): Promise<{ deleted: boolean }> {
+    const result = await runQueryOne<{ deleted: boolean }>(
       `MATCH (u:User {userId: $userId})-[:PARTICIPATES_IN]-(c:Conversation)
        WHERE c.conversationId = $conversationRef OR c.directKey = $conversationRef
        MERGE (u)-[hidden:HIDDEN_CONVERSATION]->(c)
-       SET hidden.hiddenAt = $now`,
+       SET hidden.hiddenAt = $now
+       WITH c
+       MATCH (participant:User)-[:PARTICIPATES_IN]-(c)
+       WITH c, count(DISTINCT participant) AS participantCount
+       OPTIONAL MATCH (hiddenUser:User)-[:HIDDEN_CONVERSATION]->(c)
+       WITH c, participantCount, count(DISTINCT hiddenUser) AS hiddenCount
+       CALL {
+         WITH c, participantCount, hiddenCount
+         WITH c WHERE participantCount > 0 AND hiddenCount >= participantCount
+         DETACH DELETE c
+         RETURN true AS deleted
+         UNION
+         WITH c, participantCount, hiddenCount
+         RETURN false AS deleted
+       }
+       RETURN deleted`,
       { conversationRef, userId, now: new Date().toISOString() }
     )
+    return { deleted: !!result?.deleted }
   },
 
   async createGroupConversation(creatorId: string, name: string, participantIds: string[], avatarUrl?: string): Promise<Conversation> {

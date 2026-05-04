@@ -1,6 +1,11 @@
 import { runQueryOne } from '../../config/neo4j'
 import { usersRepository } from '../users/users.repository'
 import { AppError } from '../../middleware/errorHandler'
+import { documentsRepository } from '../documents/documents.repository'
+import { documentsService } from '../documents/documents.service'
+import { buildSignedRawAccessUrl } from '../../utils/cloudinary'
+import { paginationMeta } from '../../utils/response'
+import { notificationsService } from '../notifications/notifications.service'
 
 function toNumberSafe(value: unknown): number {
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0
@@ -95,5 +100,65 @@ export const adminService = {
     const user = await usersRepository.findById(userId)
     if (!user) throw new AppError('Người dùng không tồn tại', 404, 'USER_NOT_FOUND')
     await usersRepository.updateStatus(userId, 'ACTIVE')
+  },
+
+  async listDocuments(status: 'ALL' | 'PENDING' | 'ACTIVE' | 'REJECTED', page = 1, limit = 20) {
+    const skip = (page - 1) * limit
+    const { rows, total } = await documentsRepository.listForAdmin(status, skip, limit)
+    return {
+      documents: rows,
+      meta: paginationMeta(page, limit, total),
+    }
+  },
+
+  async getDocumentDetail(documentId: string) {
+    const document = await documentsRepository.findById(documentId)
+    if (!document) throw new AppError('Không tìm thấy tài liệu', 404, 'DOCUMENT_NOT_FOUND')
+    return document
+  },
+
+  async getDocumentAccessUrl(documentId: string, asAttachment = false) {
+    const document = await documentsRepository.findById(documentId)
+    if (!document) throw new AppError('Không tìm thấy tài liệu', 404, 'DOCUMENT_NOT_FOUND')
+    const url = buildSignedRawAccessUrl(document.fileUrl, asAttachment)
+    if (!url) throw new AppError('Không tạo được liên kết truy cập tài liệu', 500, 'DOCUMENT_URL_FAILED')
+    return { document, url }
+  },
+
+  async reviewDocument(
+    documentId: string,
+    data: { status: 'ACTIVE' | 'REJECTED'; moderationNote?: string },
+    reviewedBy: string
+  ) {
+    const document = await documentsRepository.findById(documentId)
+    if (!document) throw new AppError('Không tìm thấy tài liệu', 404, 'DOCUMENT_NOT_FOUND')
+
+    const updated = await documentsRepository.updateStatus(documentId, data.status, {
+      reviewedBy,
+      moderationNote: data.moderationNote,
+    })
+
+    if (updated && data.status === 'REJECTED' && document.uploaderId) {
+      const documentTitle = updated.title?.trim() || updated.fileName?.trim() || 'tài liệu của bạn'
+      const moderationNote = data.moderationNote?.trim()
+      const content = moderationNote
+        ? `Tài liệu "${documentTitle}" đã bị từ chối duyệt. Lý do: ${moderationNote}`
+        : `Tài liệu "${documentTitle}" đã bị từ chối duyệt.`
+
+      await notificationsService.push({
+        recipientId: document.uploaderId,
+        senderId: reviewedBy,
+        type: 'ADMIN_ACTION',
+        entityId: documentId,
+        entityType: 'DOCUMENT',
+        content,
+      })
+    }
+
+    return updated
+  },
+
+  async deleteDocument(documentId: string) {
+    await documentsService.deleteAsAdmin(documentId)
   },
 }

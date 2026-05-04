@@ -181,6 +181,10 @@ export default function NotificationsPage() {
       navigate(`/posts/${entityId}`)
       return
     }
+    if (notif.type === 'GROUP_REQUEST') {
+      navigate('/groups?action=requests')
+      return
+    }
     if (entityType === 'GROUP' && entityId) {
       navigate(`/groups/${entityId}`)
       return

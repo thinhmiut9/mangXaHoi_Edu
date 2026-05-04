@@ -13,6 +13,8 @@
     "db:seed": "ts-node src/db/seed.ts",
     "db:ensure-admin": "ts-node src/db/ensureAdmin.ts",
     "db:migrate": "ts-node src/db/migrate.ts",
+    "db:generate-neighborhood-data": "ts-node src/db/generateNeighborhoodData.ts",
+    "db:restore-users-friendships": "ts-node src/db/restoreUsersAndFriendships.ts",
     "db:seed:cloudinary-images": "ts-node src/db/seedCloudinaryImages.ts",
     "db:assign:cloudinary-random": "ts-node src/db/assignFromCloudinary.ts"
   },

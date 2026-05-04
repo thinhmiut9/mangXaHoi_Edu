@@ -174,6 +174,14 @@ export const groupsRepository = {
     )
   },
 
+  async assignRole(groupId: string, userId: string, role: string): Promise<void> {
+    await runQuery(
+      `MATCH (u:User {userId: $userId})-[r:MEMBER_OF]->(g:Group {groupId: $groupId})
+       SET r.role = $role`,
+      { userId, groupId, role }
+    )
+  },
+
   async update(groupId: string, data: Partial<{ name: string; description: string; coverUrl: string; privacy: string; status: string }>): Promise<Group | null> {
     const now = new Date().toISOString()
     const setClauses = Object.entries(data).filter(([, v]) => v !== undefined).map(([k]) => `g.${k} = $${k}`).join(', ')

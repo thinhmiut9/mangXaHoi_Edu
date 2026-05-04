@@ -1,4 +1,4 @@
-import { Outlet, Navigate, NavLink, useNavigate } from 'react-router-dom'
+Ôªøimport { Outlet, Navigate, NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { authApi } from '@/api/auth'
 import { disconnectSocket } from '@/socket/socketClient'
@@ -23,8 +23,9 @@ export default function AdminLayout() {
 
   const navItems = [
     { to: '/admin', label: 'Dashboard', icon: 'dashboard' },
-    { to: '/admin/users', label: 'Qu?n l˝ User', icon: 'users' },
-    { to: '/admin/reports', label: 'B·o c·o', icon: 'reports' },
+    { to: '/admin/users', label: 'Qu?n l√Ω User', icon: 'users' },
+    { to: '/admin/documents', label: 'T√†i li·ªáu', icon: 'documents' },
+    { to: '/admin/reports', label: 'B√°o c√°o', icon: 'reports' },
   ] as const
 
   return (
@@ -64,6 +65,14 @@ export default function AdminLayout() {
                   <path d="M8 12h8M8 8h8M8 16h5" />
                 </svg>
               )}
+              {item.icon === 'documents' && (
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+                  <path d="M14 3v5h5" />
+                  <path d="M9 13h6" />
+                  <path d="M9 17h6" />
+                </svg>
+              )}
               <span>{item.label}</span>
             </NavLink>
           ))}
@@ -79,9 +88,9 @@ export default function AdminLayout() {
               <path d="M16 17l5-5-5-5" />
               <path d="M21 12H9" />
             </svg>
-            <span>–ang xu?t</span>
+            <span>√êang xu?t</span>
           </button>
-          <div className="mt-4 border-t border-slate-200 pt-4 text-xs text-slate-400">© 2026 EduSocial</div>
+          <div className="mt-4 border-t border-slate-200 pt-4 text-xs text-slate-400">¬© 2026 EduSocial</div>
         </div>
       </aside>
 
@@ -93,3 +102,4 @@ export default function AdminLayout() {
     </div>
   )
 }
+

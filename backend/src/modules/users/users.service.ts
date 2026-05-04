@@ -70,6 +70,17 @@ function scoreUser(user: UserPublic, keywordNorm: string): number {
   return best
 }
 
+function toSafePositiveInt(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1
+  if (typeof value === 'bigint') return value > 0n ? Number(value) : 1
+  if (value && typeof value === 'object' && 'toNumber' in value) {
+    const parsed = (value as { toNumber?: () => number }).toNumber?.()
+    return typeof parsed === 'number' && Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1
+  }
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1
+}
+
 async function canViewPrivateContent(viewerId: string | undefined, ownerId: string): Promise<boolean> {
   if (!viewerId) return false
   if (viewerId === ownerId) return true
@@ -172,7 +183,8 @@ export const usersService = {
     if (!keyword) return { users: [], meta: paginationMeta(page, limit, 0) }
 
     const keywordNorm = normalizeForSearch(keyword)
-    const candidates = await usersRepository.search('', 500, 0, viewerId)
+    const totalUsers = toSafePositiveInt(await usersRepository.countAll())
+    const candidates = await usersRepository.search('', totalUsers, 0, viewerId)
 
     const ranked = candidates
       .map(user => ({ user, score: scoreUser(user, keywordNorm) }))
@@ -217,7 +229,8 @@ export const usersService = {
     const keyword = q.trim()
     if (!keyword) return []
     const keywordNorm = normalizeForSearch(keyword)
-    const candidates = await usersRepository.search('', Math.min(limit * 5, 100), 0, viewerId)
+    const totalUsers = toSafePositiveInt(await usersRepository.countAll())
+    const candidates = await usersRepository.search('', totalUsers, 0, viewerId)
     return candidates
       .map(user => ({ user, score: scoreUser(user, keywordNorm) }))
       .filter(item => item.score > 0)

@@ -21,6 +21,7 @@ async function migrate(): Promise<void> {
     `CREATE CONSTRAINT report_reportId   IF NOT EXISTS FOR (r:Report)       REQUIRE r.reportId       IS UNIQUE`,
     `CREATE CONSTRAINT story_storyId     IF NOT EXISTS FOR (s:Story)        REQUIRE s.storyId        IS UNIQUE`,
     `CREATE CONSTRAINT document_documentId IF NOT EXISTS FOR (d:Document)   REQUIRE d.documentId     IS UNIQUE`,
+    `CREATE CONSTRAINT document_fileHash IF NOT EXISTS FOR (d:Document)     REQUIRE d.fileHash       IS UNIQUE`,
   ]
 
   const indexes = [

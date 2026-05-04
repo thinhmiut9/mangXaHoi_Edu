@@ -184,6 +184,7 @@ export default function ChatPage() {
   const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([])
   const [groupAvatarUrl, setGroupAvatarUrl] = useState('')
   const [groupAvatarPreview, setGroupAvatarPreview] = useState('')
+  const [isUploadingGroupAvatar, setIsUploadingGroupAvatar] = useState(false)
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 1024)
   const [callStatus, setCallStatus] = useState<CallStatus>('idle')
   const [incomingCall, setIncomingCall] = useState<IncomingCallState | null>(null)
@@ -372,6 +373,7 @@ export default function ChatPage() {
       setSelectedFriendIds([])
       setGroupAvatarUrl('')
       setGroupAvatarPreview('')
+      setIsUploadingGroupAvatar(false)
       queryClient.invalidateQueries({ queryKey: ['conversations'] })
       toast.success('Tạo nhóm thành công!')
     },
@@ -1824,7 +1826,15 @@ export default function ChatPage() {
       {/* Create Group Modal */}
       <Modal
         open={newGroupOpen}
-        onClose={() => { setNewGroupOpen(false); setGroupName(''); setSelectedFriendIds([]); setGroupAvatarUrl(''); setGroupAvatarPreview('') }}
+        onClose={() => {
+          if (isUploadingGroupAvatar || createGroupMutation.isPending) return
+          setNewGroupOpen(false)
+          setGroupName('')
+          setSelectedFriendIds([])
+          setGroupAvatarUrl('')
+          setGroupAvatarPreview('')
+          setIsUploadingGroupAvatar(false)
+        }}
         title="Tạo nhóm nhắn tin"
         size="md"
         footer={
@@ -1832,8 +1842,8 @@ export default function ChatPage() {
             <Button variant="ghost" onClick={() => { setNewGroupOpen(false); setGroupName(''); setSelectedFriendIds([]); setGroupAvatarUrl(''); setGroupAvatarPreview('') }}>Hủy</Button>
             <Button
               onClick={() => createGroupMutation.mutate()}
-              disabled={!groupName.trim() || selectedFriendIds.length < 2 || createGroupMutation.isPending}
-              loading={createGroupMutation.isPending}
+              disabled={!groupName.trim() || selectedFriendIds.length < 2 || createGroupMutation.isPending || isUploadingGroupAvatar}
+              loading={createGroupMutation.isPending || isUploadingGroupAvatar}
             >
               Tạo nhóm ({selectedFriendIds.length} đã chọn)
             </Button>
@@ -1867,18 +1877,35 @@ export default function ChatPage() {
                   reader.readAsDataURL(file)
                   // Upload to Cloudinary via existing API
                   try {
+                    setIsUploadingGroupAvatar(true)
+                    setGroupAvatarUrl('')
                     const result = await uploadsApi.uploadImage(file, 'images')
                     setGroupAvatarUrl(result?.url ?? '')
+                    toast.success('Da tai anh nhom len')
+                    setIsUploadingGroupAvatar(false)
+                    e.target.value = ''
                   } catch {
+                    setGroupAvatarPreview('')
+                    setGroupAvatarUrl('')
+                    setIsUploadingGroupAvatar(false)
+                    e.target.value = ''
                     toast.error('Không thể tải ảnh lên, vui lòng thử lại')
                   }
                 }}
               />
             </label>
+            {isUploadingGroupAvatar && (
+              <p className="text-xs font-medium text-primary-600">Dang tai anh nhom...</p>
+            )}
             {groupAvatarPreview && (
               <button
                 type="button"
-                onClick={() => { setGroupAvatarPreview(''); setGroupAvatarUrl('') }}
+                onClick={() => {
+                  if (isUploadingGroupAvatar) return
+                  setGroupAvatarPreview('')
+                  setGroupAvatarUrl('')
+                }}
+                disabled={isUploadingGroupAvatar}
                 className="text-xs text-red-500 hover:text-red-700 font-medium"
               >
                 Xóa ảnh

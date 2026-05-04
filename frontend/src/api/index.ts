@@ -186,6 +186,7 @@ export const groupsApi = {
     apiClient.post<ApiResponse<any>>('/groups', data).then(r => normalizeGroup(r.data.data)),
   updateGroup: (id: string, data: { name?: string; description?: string; coverUrl?: string; privacy?: string; status?: 'ACTIVE' | 'ARCHIVED' }) =>
     apiClient.put<ApiResponse<any>>(`/groups/${id}`, data).then(r => normalizeGroup(r.data.data)),
+  deleteGroup: (id: string) => apiClient.delete(`/groups/${id}`),
   join: (id: string) =>
     apiClient
       .post<ApiResponse<{ status: 'JOINED' | 'REQUESTED' }>>(`/groups/${id}/join`)
@@ -193,6 +194,7 @@ export const groupsApi = {
   leave: (id: string) => apiClient.delete(`/groups/${id}/leave`),
   getMembers: (id: string) => apiClient.get(`/groups/${id}/members`).then(r => r.data),
   removeMember: (id: string, userId: string) => apiClient.delete(`/groups/${id}/members/${userId}`),
+  assignRole: (id: string, userId: string, role: string) => apiClient.put(`/groups/${id}/members/${userId}/role`, { role }),
   getJoinRequests: (id: string): Promise<GroupJoinRequest[]> =>
     apiClient.get<ApiResponse<any[]>>(`/groups/${id}/requests`).then(r =>
       (r.data.data ?? []).map((raw: any) => {
@@ -321,4 +323,19 @@ export const adminApi = {
       notifyReporter?: boolean
     }
   ) => apiClient.put(`/reports/${id}`, payload),
+  listDocuments: (status = 'ALL', page = 1, limit = 20) =>
+    apiClient
+      .get<ApiResponse<any[]>>('/admin/documents', { params: { status, page, limit } })
+      .then(r => r.data.data ?? []),
+  getDocumentDetail: (id: string) =>
+    apiClient.get<ApiResponse<any>>(`/admin/documents/${id}`).then(r => r.data.data),
+  getDocumentAccessUrl: (id: string, download = false) =>
+    apiClient
+      .get<ApiResponse<{ url: string }>>(`/admin/documents/${id}/access-url`, {
+        params: download ? { download: 1 } : undefined,
+      })
+      .then(r => r.data.data.url),
+  reviewDocument: (id: string, payload: { status: 'ACTIVE' | 'REJECTED'; moderationNote?: string }) =>
+    apiClient.put<ApiResponse<any>>(`/admin/documents/${id}/review`, payload).then(r => r.data.data),
+  deleteDocument: (id: string) => apiClient.delete(`/admin/documents/${id}`),
 }

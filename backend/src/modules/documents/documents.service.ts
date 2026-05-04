@@ -1,11 +1,12 @@
 import { v4 as uuidv4 } from 'uuid'
 import path from 'path'
+import { createHash } from 'crypto'
 import { paginationMeta } from '../../utils/response'
 import { uploadRawToCloudinary } from '../uploads/uploads.utils'
 import { AppError } from '../../middleware/errorHandler'
 import { CreateDocumentDto, ListDocumentsQueryDto } from './documents.schema'
-import { documentsRepository } from './documents.repository'
-import { buildSignedRawAccessUrl } from '../../utils/cloudinary'
+import { documentsRepository, type DocumentRow } from './documents.repository'
+import { buildSignedRawAccessUrl, deleteCloudinaryAsset } from '../../utils/cloudinary'
 
 function sanitizeBaseFileName(name: string): string {
   const ext = (path.extname(name || '') || '').toLowerCase()
@@ -37,9 +38,41 @@ function getMimeType(fileName: string, fileType: 'PDF' | 'DOC' | 'PPT'): string 
   return 'application/octet-stream'
 }
 
+function buildDuplicateDocumentError(document: DocumentRow | null | undefined): AppError {
+  const existingTitle = document?.title?.trim() || document?.fileName?.trim() || 'tai lieu khac'
+  return new AppError(
+    `Tai lieu nay da ton tai trong he thong (${existingTitle}).`,
+    409,
+    'DOCUMENT_DUPLICATE',
+    document
+      ? {
+          documentId: [document.documentId],
+          title: [existingTitle],
+          status: [document.status],
+          uploaderId: [document.uploaderId],
+        }
+      : undefined
+  )
+}
+
+function isFileHashConstraintError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const candidate = err as { code?: string; message?: string }
+  return (
+    candidate.code === 'Neo.ClientError.Schema.ConstraintValidationFailed' &&
+    !!(candidate.message?.includes('document_fileHash') || candidate.message?.includes('fileHash'))
+  )
+}
+
 export const documentsService = {
   async create(userId: string, dto: CreateDocumentDto, file: Express.Multer.File | undefined) {
     if (!file) throw new AppError('Khong co file duoc tai len', 400, 'DOCUMENT_FILE_REQUIRED')
+
+    const fileHash = createHash('sha256').update(file.buffer).digest('hex')
+    const duplicatedDocument = await documentsRepository.findByFileHash(fileHash)
+    if (duplicatedDocument) {
+      throw buildDuplicateDocumentError(duplicatedDocument)
+    }
 
     const ext = (path.extname(file.originalname || '') || '').toLowerCase()
     const base = sanitizeBaseFileName(file.originalname || 'document')
@@ -47,25 +80,37 @@ export const documentsService = {
     const uploaded = await uploadRawToCloudinary(file.buffer, 'documents', publicId, file.originalname)
 
     const now = new Date().toISOString()
-    const saved = await documentsRepository.create({
-      documentId: uuidv4(),
-      title: dto.title?.trim() || base,
-      fileName: file.originalname,
-      fileUrl: uploaded.url,
-      fileType: normalizeFileTypeByExt(file.originalname),
-      subject: dto.subject,
-      school: dto.school,
-      major: dto.major,
-      cohort: dto.cohort,
-      description: dto.description,
-      tags: dto.tags,
-      visibility: dto.visibility ?? 'PUBLIC',
-      uploaderId: userId,
-      createdAt: now,
-      updatedAt: now,
-    })
+    try {
+      const saved = await documentsRepository.create({
+        documentId: uuidv4(),
+        title: dto.title?.trim() || base,
+        fileName: file.originalname,
+        fileUrl: uploaded.url,
+        fileHash,
+        uploadSourceName: file.originalname,
+        duplicateOf: null,
+        fileType: normalizeFileTypeByExt(file.originalname),
+        subject: dto.subject,
+        school: dto.school,
+        major: dto.major,
+        cohort: dto.cohort,
+        description: dto.description,
+        tags: dto.tags,
+        visibility: dto.visibility ?? 'PUBLIC',
+        uploaderId: userId,
+        createdAt: now,
+        updatedAt: now,
+      })
 
-    return saved
+      return saved
+    } catch (err) {
+      await deleteCloudinaryAsset(uploaded.url).catch(() => {})
+      if (isFileHashConstraintError(err)) {
+        const duplicatedAfterCreate = await documentsRepository.findByFileHash(fileHash)
+        throw buildDuplicateDocumentError(duplicatedAfterCreate)
+      }
+      throw err
+    }
   },
 
   async list(userId: string, query: ListDocumentsQueryDto) {
@@ -141,5 +186,27 @@ export const documentsService = {
   async toggleSave(userId: string, documentId: string) {
     await this.getAccessible(userId, documentId)
     return documentsRepository.toggleSave(documentId, userId)
+  },
+
+  async deleteOwn(userId: string, documentId: string) {
+    const document = await documentsRepository.findOwnedById(userId, documentId)
+    if (!document) throw new AppError('Khong tim thay tai lieu', 404, 'DOCUMENT_NOT_FOUND')
+
+    if (document.fileUrl) {
+      await deleteCloudinaryAsset(document.fileUrl)
+    }
+
+    await documentsRepository.delete(documentId)
+  },
+
+  async deleteAsAdmin(documentId: string) {
+    const document = await documentsRepository.findById(documentId)
+    if (!document) throw new AppError('Khong tim thay tai lieu', 404, 'DOCUMENT_NOT_FOUND')
+
+    if (document.fileUrl) {
+      await deleteCloudinaryAsset(document.fileUrl)
+    }
+
+    await documentsRepository.delete(documentId)
   },
 }

@@ -27,6 +27,7 @@ const MyUploadedDocumentsPage = lazy(() => import('@/pages/documents/MyUploadedD
 const AdminLayout        = lazy(() => import('@/components/layout/AdminLayout'))
 const AdminDashboard     = lazy(() => import('@/pages/admin/AdminDashboardPage'))
 const AdminUsersPage     = lazy(() => import('@/pages/admin/AdminUsersPage'))
+const AdminDocumentsPage = lazy(() => import('@/pages/admin/AdminDocumentsPage'))
 const AdminReportsPage   = lazy(() => import('@/pages/admin/AdminReportsPage'))
 
 // Suspense wrapper
@@ -119,6 +120,7 @@ const router = createBrowserRouter([
             children: [
               { path: '/admin',         element: <AdminDashboard /> },
               { path: '/admin/users',   element: <AdminUsersPage /> },
+              { path: '/admin/documents', element: <AdminDocumentsPage /> },
               { path: '/admin/reports', element: <AdminReportsPage /> },
             ],
           },
