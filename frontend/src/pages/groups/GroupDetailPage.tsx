@@ -224,7 +224,7 @@ export default function GroupDetailPage() {
     mutationFn: async () => {
       let coverUrl = group?.coverUrl || ''
       if (editGroupCoverFile) {
-        const uploaded = await uploadsApi.uploadImage(editGroupCoverFile, 'groups')
+        const uploaded = await uploadsApi.uploadImage(editGroupCoverFile, 'covers')
         coverUrl = uploaded.url
       }
       return groupsApi.updateGroup(id, {
