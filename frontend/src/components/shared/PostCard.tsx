@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Comment as PostComment, Post, postsApi } from '@/api/posts'
@@ -78,6 +79,15 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
   const [reportCommentTarget, setReportCommentTarget] = useState<string | null>(null)
   const [commentReportReason, setCommentReportReason] = useState('SPAM')
   const [commentReportDesc, setCommentReportDesc] = useState('')
+
+  useEffect(() => {
+    if (!detailOpen) return
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = originalOverflow
+    }
+  }, [detailOpen])
 
   // Close comment menu on outside click
   const handleOutsideClick = () => setCommentMenuId(null)
@@ -269,6 +279,116 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
   }, {})
   const rootComments = commentsList.filter(comment => !comment.parentId)
   const handleSharePost = () => setShareOpen(true)
+
+  const renderOriginalPostEmbed = (mode: 'card' | 'detail' = 'card') => {
+    const originalPost = post.originalPost
+    if (!originalPost) return null
+
+    const originalMedia = (originalPost.mediaUrls ?? originalPost.images ?? []).filter(Boolean)
+    const originalImageUrls = Array.from(
+      new Set([...(originalPost.imageUrls ?? originalPost.images ?? []), ...originalMedia.filter(isImageLikeUrl)])
+    )
+    const originalVideoUrls = Array.from(new Set([...(originalPost.videoUrls ?? []), ...originalMedia.filter(isVideoLikeUrl)]))
+    const originalDocumentUrls = Array.from(
+      new Set([
+        ...(originalPost.documentUrls ?? []),
+        ...originalMedia.filter((url) => !isImageLikeUrl(url) && !isVideoLikeUrl(url) && isDocumentLikeUrl(url)),
+      ])
+    )
+
+    return (
+      <div
+        className={cn(
+          'rounded-xl border border-slate-200 overflow-hidden bg-slate-50',
+          mode === 'card'
+            ? 'mx-4 mb-3 mt-2 cursor-pointer hover:bg-slate-100 transition-colors'
+            : 'bg-white'
+        )}
+        onClick={mode === 'card' ? openDetail : undefined}
+      >
+        <Link
+          to={`/profile/${originalPost.author?.id ?? originalPost.authorId}`}
+          onClick={e => e.stopPropagation()}
+          className="flex items-center gap-2 px-3 pt-3 pb-2 hover:bg-slate-200/50 transition-colors"
+        >
+          <Avatar
+            src={originalPost.author?.avatar}
+            name={originalPost.author?.displayName ?? ''}
+            size="xs"
+          />
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-slate-800 truncate leading-tight hover:underline">
+              {originalPost.author?.displayName ?? 'Nguoi dung'}
+            </p>
+            <p className="text-[11px] text-slate-500 leading-tight">
+              {timeAgo(originalPost.createdAt)}
+            </p>
+          </div>
+        </Link>
+
+        {originalPost.content && (
+          <p className={cn('px-3 pb-2 text-sm text-slate-700 whitespace-pre-wrap', mode === 'card' && 'line-clamp-3')}>
+            <MentionText content={originalPost.content} />
+          </p>
+        )}
+
+        {originalImageUrls.length > 0 && (
+          <div className={cn('grid gap-1 bg-white', originalImageUrls.length === 1 ? 'grid-cols-1' : 'grid-cols-2')}>
+            {originalImageUrls.slice(0, mode === 'card' ? 1 : 4).map((img, idx) => (
+              <img
+                key={`${originalPost.id}-original-img-${idx}`}
+                src={img}
+                alt={`Anh bai goc ${idx + 1}`}
+                className={cn('w-full object-cover', mode === 'card' ? 'max-h-64' : 'max-h-80 rounded-md border border-border-light')}
+                loading="lazy"
+              />
+            ))}
+          </div>
+        )}
+
+        {originalImageUrls.length === 0 && originalVideoUrls.length > 0 && (
+          <div className="space-y-2 bg-white">
+            {originalVideoUrls.slice(0, mode === 'card' ? 1 : 3).map((url, idx) => (
+              <video
+                key={`${originalPost.id}-original-video-${idx}`}
+                src={url}
+                className={cn('w-full bg-black object-contain', mode === 'card' ? 'max-h-64' : 'max-h-96 rounded-md border border-border-light')}
+                controls={mode === 'detail'}
+                preload="metadata"
+                muted={mode === 'card'}
+              />
+            ))}
+          </div>
+        )}
+
+        {mode === 'detail' && originalDocumentUrls.length > 0 && (
+          <div className="space-y-2 p-3 pt-0">
+            {originalDocumentUrls.map((url, idx) => (
+              <a
+                key={`${originalPost.id}-original-doc-${idx}`}
+                href={url}
+                download={getFileName(url)}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 hover:bg-slate-100"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="h-9 w-9 rounded-lg bg-red-100 text-red-600 grid place-items-center text-[11px] font-bold">
+                    {getFileExtLabel(url)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-slate-800 truncate">{getFileName(url)}</p>
+                    <p className="text-[12px] text-slate-500">Tai lieu dinh kem</p>
+                  </div>
+                </div>
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   const renderComment = (comment: PostComment, depth = 0): JSX.Element => {
     const isOwnComment = user?.id === comment.authorId
@@ -846,7 +966,7 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
         </button>
       </div>
 
-      <Modal open={detailOpen} onClose={() => setDetailOpen(false)} title="Chi tiết bài viết" size="xl">
+      <Modal open={detailOpen} onClose={() => setDetailOpen(false)} title="Chi tiết bài viết" size="xl" mobileFullscreen>
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <Avatar src={post.author?.avatar} name={post.author?.displayName ?? ''} size="md" />
@@ -861,6 +981,8 @@ export function PostCard({ post, showComments = false, canPin = false }: PostCar
           <p className="text-sm text-text-primary whitespace-pre-wrap">
             <MentionText content={post.content} />
           </p>
+
+          {renderOriginalPostEmbed('detail')}
 
           {imageUrls.length > 0 && (
             <div className={cn('grid gap-1', imageUrls.length === 1 ? 'grid-cols-1' : 'grid-cols-2')}>

@@ -26,7 +26,15 @@ apiClient.interceptors.response.use(
   (err: AxiosError) => {
     const status = err.response?.status
     const code = (err.response?.data as { code?: string } | undefined)?.code
-    if ((status === 401 || (status === 403 && code === 'ACCOUNT_BLOCKED')) && !isRedirectingToLogin) {
+    const requestUrl = err.config?.url ?? ''
+    const isPublicAuthRequest = [
+      '/auth/login',
+      '/auth/register',
+      '/auth/forgot-password',
+      '/auth/reset-password',
+    ].some(path => requestUrl.includes(path))
+
+    if (!isPublicAuthRequest && (status === 401 || (status === 403 && code === 'ACCOUNT_BLOCKED')) && !isRedirectingToLogin) {
       isRedirectingToLogin = true
       // Xóa cả auth_token lẫn Zustand persisted store để tránh vòng lặp reload
       localStorage.removeItem('auth_token')
@@ -53,17 +61,39 @@ export interface ApiResponse<T> {
 
 export function extractError(err: unknown): string {
   if (axios.isAxiosError(err)) {
+    const data = err.response?.data as { message?: string; code?: string } | undefined
+    const message = data?.message ?? err.message
+    const normalizedMessage = message.toLowerCase()
+    if (
+      data?.code === 'SERVICE_UNAVAILABLE' ||
+      data?.code === 'DATABASE_UNAVAILABLE' ||
+      data?.code === 'NEO4J_UNAVAILABLE' ||
+      normalizedMessage.includes('could not perform discovery') ||
+      normalizedMessage.includes('no routing servers available') ||
+      normalizedMessage.includes('routingtable') ||
+      normalizedMessage.includes('serviceunavailable') ||
+      normalizedMessage.includes('sessionexpired') ||
+      normalizedMessage.includes('getaddrinfo enotfound')
+    ) {
+      return 'He thong dang tam thoi khong ket noi duoc co so du lieu. Neu dung Neo4j Aura, hay mo lai database roi thu lai.'
+    }
+    if (data?.code === 'INVALID_CREDENTIALS') {
+      return 'Email hoặc mật khẩu không đúng.'
+    }
+    if (data?.code === 'ACCOUNT_BLOCKED') {
+      return data.message ?? 'Tài khoản của bạn đang bị khóa.'
+    }
     if (err.code === 'ECONNABORTED') {
-      return 'Server phan hoi cham. Vui long thu lai sau it giay.'
+      return 'Server phản hồi chậm. Vui lòng thử lại sau ít giây.'
     }
     if (err.code === 'ERR_NETWORK') {
-      return 'Khong ket noi duoc toi may chu API. Hay kiem tra URL backend/CORS.'
+      return 'Không kết nối được tới máy chủ API. Hãy kiểm tra URL backend/CORS.'
     }
     if (err.response?.status === 429) {
-      return 'Ban dang thao tac qua nhanh. Vui long doi mot chut roi thu lai.'
+      return 'Bạn đang thao tác quá nhanh. Vui lòng đợi một chút rồi thử lại.'
     }
-    return (err.response?.data as { message?: string })?.message ?? err.message
+    return message
   }
   if (err instanceof Error) return err.message
-  return 'Có lỗi xảy ra'
+  return 'Có lỗi xảy ra.'
 }

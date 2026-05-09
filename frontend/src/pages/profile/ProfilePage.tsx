@@ -31,6 +31,9 @@ type EditProfileForm = {
   displayName: string
   bio: string
   location: string
+  school: string
+  major: string
+  cohort: string
   avatar: string
   coverPhoto: string
   profileVisibility: 'PUBLIC' | 'PRIVATE'
@@ -46,9 +49,18 @@ const EMPTY_FORM: EditProfileForm = {
   displayName: '',
   bio: '',
   location: '',
+  school: '',
+  major: '',
+  cohort: '',
   avatar: '',
   coverPhoto: '',
   profileVisibility: 'PUBLIC',
+}
+
+function editableText(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  const text = String(value).trim()
+  return text.toLowerCase() === 'null' ? '' : text
 }
 
 function timeAgo(iso: string): string {
@@ -234,6 +246,9 @@ export default function ProfilePage() {
         displayName: editForm.displayName.trim(),
         bio: editForm.bio.trim(),
         location: editForm.location.trim(),
+        school: editForm.school.trim(),
+        major: editForm.major.trim(),
+        cohort: editForm.cohort.trim(),
         avatar,
         coverPhoto,
         profileVisibility: editForm.profileVisibility,
@@ -252,6 +267,9 @@ export default function ProfilePage() {
           displayName: updatedUser.displayName,
           bio: updatedUser.bio,
           location: updatedUser.location,
+          school: updatedUser.school,
+          major: updatedUser.major,
+          cohort: updatedUser.cohort,
           avatar: updatedUser.avatar,
           coverPhoto: updatedUser.coverPhoto,
           profileVisibility: updatedUser.profileVisibility,
@@ -395,11 +413,14 @@ export default function ProfilePage() {
   const openEditModal = () => {
     if (!profile) return
     setEditForm({
-      displayName: profile.displayName ?? '',
-      bio: profile.bio ?? '',
-      location: profile.location ?? '',
-      avatar: profile.avatar ?? '',
-      coverPhoto: profile.coverPhoto ?? '',
+      displayName: editableText(profile.displayName),
+      bio: editableText(profile.bio),
+      location: editableText(profile.location),
+      school: editableText(profile.school),
+      major: editableText(profile.major),
+      cohort: editableText(profile.cohort),
+      avatar: editableText(profile.avatar),
+      coverPhoto: editableText(profile.coverPhoto),
       profileVisibility: profile.profileVisibility === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
     })
     setAvatarFile(null)
@@ -952,6 +973,32 @@ export default function ProfilePage() {
             value={editForm.location}
             onChange={(e) => setEditForm((prev) => ({ ...prev, location: e.target.value }))}
             maxLength={120}
+          />
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
+              label="Trường"
+              value={editForm.school}
+              onChange={(e) => setEditForm((prev) => ({ ...prev, school: e.target.value }))}
+              placeholder="Ví dụ: QNU"
+              maxLength={120}
+            />
+
+            <Input
+              label="Chuyên ngành"
+              value={editForm.major}
+              onChange={(e) => setEditForm((prev) => ({ ...prev, major: e.target.value }))}
+              placeholder="Ví dụ: Công nghệ thông tin"
+              maxLength={120}
+            />
+          </div>
+
+          <Input
+            label="Khóa"
+            value={editForm.cohort}
+            onChange={(e) => setEditForm((prev) => ({ ...prev, cohort: e.target.value }))}
+            placeholder="Ví dụ: K45"
+            maxLength={50}
           />
 
           <div className="flex flex-col gap-1.5">

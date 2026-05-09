@@ -835,11 +835,11 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="px-0 py-0 md:px-4 md:py-4 lg:px-6 lg:py-6 flex h-[calc(100dvh-56px)] max-h-[calc(100dvh-56px)] bg-[#F5F7FA] gap-0 md:gap-4 overflow-hidden">
+    <div className="px-0 py-0 md:px-4 md:py-4 lg:px-6 lg:py-6 flex h-[calc(100dvh-56px)] max-h-[calc(100dvh-56px)] min-h-0 bg-[#F5F7FA] gap-0 md:gap-4 overflow-hidden">
       
       {/* COLUMN 1: Chat List */}
-      <div className={cn('w-full md:w-[340px] lg:w-[360px] flex-shrink-0 flex flex-col', activeConvId ? 'hidden md:flex' : 'flex')}>
-        <div className="flex justify-between items-center mb-3 px-1.5">
+      <div className={cn('h-full min-h-0 w-full md:w-[340px] lg:w-[360px] flex-shrink-0 flex-col overflow-hidden', activeConvId ? 'hidden md:flex' : 'flex')}>
+        <div className="flex-shrink-0 flex justify-between items-center mb-3 px-1.5">
           <div className="flex flex-col">
             <h2 className="text-[34px] leading-[1.05] font-black text-text-primary tracking-tight">Tin nhắn</h2>
             <span className="text-[14px] text-text-muted font-semibold mt-0.5">{conversationList.length} cuộc trò chuyện gần đây</span>
@@ -877,7 +877,7 @@ export default function ChatPage() {
           </button>
         </div>
 
-        <div className="flex gap-2.5 mb-4 px-1.5">
+        <div className="flex-shrink-0 flex gap-2.5 mb-4 px-1.5">
           <button
             onClick={() => setListTab('all')}
             className={cn(
@@ -913,7 +913,7 @@ export default function ChatPage() {
           </button>
         </div>
 
-        <div className="mb-4 px-1.5">
+        <div className="flex-shrink-0 mb-4 px-1.5">
           <div className="flex items-center justify-between mb-2">
             <p className="text-[13px] font-semibold text-text-secondary">Bạn bè</p>
             <button
@@ -956,7 +956,7 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto space-y-3 pr-2 pb-4 scrollbar-thin">
+        <div className="min-h-0 flex-1 overflow-y-auto space-y-3 pr-2 pb-4 overscroll-contain scrollbar-thin">
           {convsLoading ? (
             <div className="flex justify-center py-8"><Spinner /></div>
           ) : convsError ? (
@@ -1103,7 +1103,7 @@ export default function ChatPage() {
         </div>
 
         {/* ── Fixed bottom: action buttons ── */}
-        <div className="flex-shrink-0 pt-2 border-t border-gray-100 grid grid-cols-2 gap-2">
+        <div className="flex-shrink-0 pt-2 border-t border-gray-100 bg-[#F5F7FA] grid grid-cols-2 gap-2">
           <button onClick={() => setNewChatOpen(true)} className="flex items-center justify-center gap-1.5 p-2.5 bg-white border border-dashed border-gray-300 rounded-2xl text-gray-500 hover:text-primary-600 hover:border-primary-300 transition-colors font-medium text-sm">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
             Chat mới

@@ -119,6 +119,20 @@ export default function GroupDetailPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  useEffect(() => {
+    return () => {
+      if (editGroupCoverPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(editGroupCoverPreview)
+      }
+    }
+  }, [editGroupCoverPreview])
+
+  const closeEditGroupModal = () => {
+    setShowEditGroupModal(false)
+    setEditGroupCoverFile(null)
+    setEditGroupCoverPreview('')
+  }
+
   const groupQuery = useQuery({
     queryKey: ['group', id],
     enabled: !!id,
@@ -236,7 +250,7 @@ export default function GroupDetailPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['group', id] })
-      setShowEditGroupModal(false)
+      closeEditGroupModal()
       toast.success('Đã cập nhật thông tin nhóm.')
     },
     onError: (error) => toast.error(extractError(error)),
@@ -551,11 +565,12 @@ export default function GroupDetailPage() {
 
       <Modal
         open={showEditGroupModal}
-        onClose={() => setShowEditGroupModal(false)}
+        onClose={closeEditGroupModal}
         title='Chỉnh sửa nhóm'
+        size='2xl'
         footer={(
           <>
-            <Button variant='secondary' onClick={() => setShowEditGroupModal(false)} disabled={editGroupMutation.isPending}>
+            <Button variant='secondary' onClick={closeEditGroupModal} disabled={editGroupMutation.isPending}>
               Hủy
             </Button>
             <Button onClick={() => editGroupMutation.mutate()} loading={editGroupMutation.isPending} disabled={!editGroupName.trim()}>
@@ -564,40 +579,86 @@ export default function GroupDetailPage() {
           </>
         )}
       >
-        <div className='space-y-4'>
+        <div className='space-y-5'>
           <div>
-            <label className='mb-2 block text-sm font-semibold text-slate-700'>Tên nhóm</label>
+            <label className='mb-2 block text-sm font-semibold text-slate-800'>
+              Tên nhóm <span className='text-red-500'>*</span>
+            </label>
             <input
               type='text'
               value={editGroupName}
               onChange={(e) => setEditGroupName(e.target.value)}
-              className='w-full rounded-xl border border-slate-200 px-4 py-2 outline-none focus:border-slate-400'
+              className='h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100'
               placeholder='Nhập tên nhóm...'
             />
           </div>
+
           <div>
-            <label className='mb-2 block text-sm font-semibold text-slate-700'>Mô tả</label>
+            <label className='mb-2 block text-sm font-semibold text-slate-800'>Mô tả</label>
             <textarea
               value={editGroupDescription}
               onChange={(e) => setEditGroupDescription(e.target.value)}
-              className='w-full rounded-xl border border-slate-200 px-4 py-2 outline-none focus:border-slate-400'
+              className='min-h-[116px] w-full resize-none rounded-xl border border-slate-300 bg-white px-4 py-3 text-base outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100'
               placeholder='Nhập mô tả...'
-              rows={3}
+              maxLength={500}
             />
+            <p className='mt-1 text-right text-xs text-slate-400'>{editGroupDescription.length}/500</p>
           </div>
+
           <div>
-            <label className='mb-2 block text-sm font-semibold text-slate-700'>Quyền riêng tư</label>
+            <label className='mb-2 block text-sm font-semibold text-slate-800'>Quyền riêng tư</label>
             <select
               value={editGroupPrivacy}
-              onChange={(e) => setEditGroupPrivacy(e.target.value as any)}
-              className='w-full rounded-xl border border-slate-200 bg-white px-4 py-2 outline-none focus:border-slate-400'
+              onChange={(e) => setEditGroupPrivacy(e.target.value as 'PUBLIC' | 'PRIVATE')}
+              className='h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100'
             >
-              <option value='PUBLIC'>Công khai - Ai cũng có thể thấy và xin tham gia</option>
-              <option value='PRIVATE'>Riêng tư - Chỉ thành viên mới thấy nội dung</option>
+              <option value='PUBLIC'>Công khai</option>
+              <option value='PRIVATE'>Riêng tư</option>
             </select>
           </div>
+
+          <div className='rounded-2xl border border-slate-200 bg-slate-50 p-4'>
+            <div className='flex gap-4'>
+              <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${editGroupPrivacy === 'PUBLIC' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-600'}`}>
+                <svg className='h-6 w-6' fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2}>
+                  {editGroupPrivacy === 'PUBLIC' ? (
+                    <path strokeLinecap='round' strokeLinejoin='round' d='M12 21a9 9 0 100-18 9 9 0 000 18zM3.6 9h16.8M3.6 15h16.8M11 3a17 17 0 000 18M13 3a17 17 0 010 18' />
+                  ) : (
+                    <path strokeLinecap='round' strokeLinejoin='round' d='M16.5 10.5V7a4.5 4.5 0 00-9 0v3.5M6.75 10.5h10.5A1.75 1.75 0 0119 12.25v6A1.75 1.75 0 0117.25 20H6.75A1.75 1.75 0 015 18.25v-6a1.75 1.75 0 011.75-1.75z' />
+                  )}
+                </svg>
+              </div>
+              <div className='min-w-0 flex-1'>
+                <p className='font-semibold text-slate-950'>
+                  {editGroupPrivacy === 'PUBLIC' ? 'Nhóm công khai' : 'Nhóm riêng tư'}
+                </p>
+                <p className='mt-1 text-sm text-slate-500'>
+                  {editGroupPrivacy === 'PUBLIC'
+                    ? 'Mọi người có thể tìm thấy nhóm và gửi yêu cầu tham gia.'
+                    : 'Chỉ thành viên nhìn thấy nội dung và danh sách bài viết trong nhóm.'}
+                </p>
+                <div className='mt-4 grid grid-cols-2 gap-2 rounded-xl bg-white p-1'>
+                  <button
+                    type='button'
+                    onClick={() => setEditGroupPrivacy('PUBLIC')}
+                    className={`h-9 rounded-lg text-sm font-semibold transition ${editGroupPrivacy === 'PUBLIC' ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
+                  >
+                    Công khai
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => setEditGroupPrivacy('PRIVATE')}
+                    className={`h-9 rounded-lg text-sm font-semibold transition ${editGroupPrivacy === 'PRIVATE' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
+                  >
+                    Riêng tư
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div>
-            <label className='mb-2 block text-sm font-semibold text-slate-700'>Ảnh bìa mới</label>
+            <label className='mb-2 block text-sm font-semibold text-slate-800'>Ảnh bìa nhóm</label>
             <input
               type='file'
               accept='image/*'
@@ -606,22 +667,49 @@ export default function GroupDetailPage() {
               onChange={(e) => {
                 const file = e.target.files?.[0]
                 if (file) {
+                  if (editGroupCoverPreview.startsWith('blob:')) {
+                    URL.revokeObjectURL(editGroupCoverPreview)
+                  }
                   setEditGroupCoverFile(file)
                   setEditGroupCoverPreview(URL.createObjectURL(file))
                 }
                 e.target.value = ''
               }}
             />
-            <div className='flex items-center gap-4'>
-              <Button type='button' variant='secondary' onClick={() => editCoverInputRef.current?.click()}>
-                Chọn ảnh
-              </Button>
-              {(editGroupCoverPreview || group.coverUrl) && (
+            <div className='overflow-hidden rounded-2xl border border-slate-200 bg-slate-50'>
+              <div className='relative aspect-[21/9] bg-slate-100'>
                 <img
-                  src={editGroupCoverPreview || group.coverUrl}
+                  src={editGroupCoverPreview || getGroupCover(group.coverUrl, group.coverPhoto)}
                   alt='Cover Preview'
-                  className='h-16 w-32 rounded-lg object-cover shadow-sm'
+                  className='h-full w-full object-cover'
                 />
+                <div className='absolute inset-0 bg-gradient-to-t from-slate-950/55 via-slate-950/5 to-transparent' />
+                <Button
+                  type='button'
+                  variant='secondary'
+                  onClick={() => editCoverInputRef.current?.click()}
+                  className='!absolute bottom-3 right-3 !bg-white/95'
+                >
+                  Chọn ảnh mới
+                </Button>
+              </div>
+              {editGroupCoverFile && (
+                <div className='flex items-center justify-between gap-3 px-4 py-3 text-sm text-slate-600'>
+                  <span className='truncate'>{editGroupCoverFile.name}</span>
+                  <button
+                    type='button'
+                    onClick={() => {
+                      if (editGroupCoverPreview.startsWith('blob:')) {
+                        URL.revokeObjectURL(editGroupCoverPreview)
+                      }
+                      setEditGroupCoverFile(null)
+                      setEditGroupCoverPreview('')
+                    }}
+                    className='shrink-0 font-semibold text-red-500 hover:text-red-600'
+                  >
+                    Gỡ ảnh
+                  </button>
+                </div>
               )}
             </div>
           </div>

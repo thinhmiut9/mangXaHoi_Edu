@@ -34,6 +34,9 @@ export interface User {
   avatarUrl?: string
   coverUrl?: string
   location?: string
+  school?: string
+  major?: string
+  cohort?: string
   status: UserStatus
   role: UserRole
   profileVisibility: ProfileVisibility
@@ -52,6 +55,9 @@ export interface UserPublic {
   avatarUrl?: string
   coverUrl?: string
   location?: string
+  school?: string
+  major?: string
+  cohort?: string
   role: UserRole
   status: UserStatus
   profileVisibility: ProfileVisibility

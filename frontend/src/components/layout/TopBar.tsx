@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { useEffect, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/authStore'
@@ -61,6 +61,7 @@ export function TopBar() {
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false)
+  const userMenuRef = useRef<HTMLDivElement | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('theme-mode')
@@ -77,7 +78,34 @@ export function TopBar() {
 
   useEffect(() => {
     setShowMobileMenu(false)
+    setShowUserMenu(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    if (!showUserMenu) return
+
+    const closeOnOutside = (event: Event) => {
+      if (!userMenuRef.current?.contains(event.target as Node)) {
+        setShowUserMenu(false)
+      }
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowUserMenu(false)
+    }
+    const closeOnScroll = () => setShowUserMenu(false)
+
+    document.addEventListener('mousedown', closeOnOutside)
+    document.addEventListener('touchstart', closeOnOutside)
+    document.addEventListener('keydown', closeOnEscape)
+    window.addEventListener('scroll', closeOnScroll, { passive: true })
+
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutside)
+      document.removeEventListener('touchstart', closeOnOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+      window.removeEventListener('scroll', closeOnScroll)
+    }
+  }, [showUserMenu])
 
   useEffect(() => {
     if (!showMobileMenu) return
@@ -289,7 +317,10 @@ export function TopBar() {
             <div className="mt-2 border-t border-border-light px-2 py-2">
               <button
                 type="button"
-                onClick={() => setConfirmLogoutOpen(true)}
+                onClick={() => {
+                  setShowMobileMenu(false)
+                  setConfirmLogoutOpen(true)
+                }}
                 className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-error-500 hover:bg-red-50"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -463,7 +494,7 @@ export function TopBar() {
         </form>
 
         <div className="flex items-center justify-end gap-2">
-          <div className="relative">
+          <div ref={userMenuRef} className="relative">
             <button
               onClick={() => setShowUserMenu(m => !m)}
               className="relative overflow-hidden flex items-center rounded-full p-0.5 transition-all duration-300 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 before:absolute before:inset-0 before:rounded-full before:bg-primary-500/12 before:opacity-0 before:scale-75 before:transition-all before:duration-300 hover:before:opacity-100 hover:before:scale-100"

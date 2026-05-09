@@ -11,6 +11,11 @@ interface MentionUser {
   avatarUrl?: string
 }
 
+type MentionToken = {
+  displayName: string
+  userId: string
+}
+
 interface MentionTextareaProps {
   value: string
   onChange: (value: string) => void
@@ -21,6 +26,42 @@ interface MentionTextareaProps {
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
   'aria-label'?: string
   autoFocus?: boolean
+}
+
+const mentionTokenRegex = /@\[([^\]]+)\]\(([^)]+)\)/g
+
+function parseMentionTokens(value: string): MentionToken[] {
+  const tokens: MentionToken[] = []
+  const seen = new Set<string>()
+  let match: RegExpExecArray | null
+
+  mentionTokenRegex.lastIndex = 0
+  while ((match = mentionTokenRegex.exec(value)) !== null) {
+    const displayName = match[1]
+    const userId = match[2]
+    const key = `${displayName}:${userId}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      tokens.push({ displayName, userId })
+    }
+  }
+
+  return tokens
+}
+
+function toDisplayValue(value: string): string {
+  return value.replace(mentionTokenRegex, '@$1')
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function toStoredValue(displayValue: string, tokens: MentionToken[]): string {
+  return tokens.reduce((next, token) => {
+    const pattern = new RegExp(`@${escapeRegExp(token.displayName)}(?![\\p{L}\\p{N}_])`, 'gu')
+    return next.replace(pattern, `@[${token.displayName}](${token.userId})`)
+  }, displayValue)
 }
 
 /* ─────────────────────────────────────────────
@@ -134,6 +175,13 @@ export function MentionTextarea({
   const [isLoading, setIsLoading] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [displayValue, setDisplayValue] = useState(() => toDisplayValue(value))
+  const [mentionTokens, setMentionTokens] = useState<MentionToken[]>(() => parseMentionTokens(value))
+
+  useEffect(() => {
+    setDisplayValue(toDisplayValue(value))
+    setMentionTokens(parseMentionTokens(value))
+  }, [value])
 
   useEffect(() => {
     if (!query && query.length === 0) { setSuggestions([]); return }
@@ -161,9 +209,10 @@ export function MentionTextarea({
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value
     const cursor = e.target.selectionStart ?? val.length
-    onChange(val)
+    setDisplayValue(val)
+    onChange(toStoredValue(val, mentionTokens))
     const textBefore = val.slice(0, cursor)
-    const atMatch = textBefore.match(/@([\w.]*)$/)
+    const atMatch = textBefore.match(/@([\p{L}\p{N}_.]*)$/u)
     if (atMatch) {
       setMentionStart(cursor - atMatch[0].length)
       setQuery(atMatch[1])
@@ -179,30 +228,35 @@ export function MentionTextarea({
   const insertMention = useCallback((user: MentionUser) => {
     if (mentionStart === null) return
     const textarea = textareaRef.current
-    const cursor = textarea?.selectionStart ?? value.length
-    const before = value.slice(0, mentionStart)
-    const after = value.slice(cursor)
+    const cursor = textarea?.selectionStart ?? displayValue.length
+    const before = displayValue.slice(0, mentionStart)
+    const after = displayValue.slice(cursor)
     const token = `@[${user.displayName}](${user.userId})`
-    const newValue = before + token + ' ' + after
-    onChange(newValue)
+    const displayMention = `@${user.displayName}`
+    const nextDisplay = before + displayMention + ' ' + after
+    const nextTokens = [...mentionTokens.filter(t => t.userId !== user.userId), { displayName: user.displayName, userId: user.userId }]
+    setDisplayValue(nextDisplay)
+    setMentionTokens(nextTokens)
+    onChange(toStoredValue(nextDisplay, nextTokens))
     setShowDropdown(false)
     setMentionStart(null)
     setQuery('')
     setTimeout(() => {
-      if (textarea) { const pos = before.length + token.length + 1; textarea.focus(); textarea.setSelectionRange(pos, pos) }
+      if (textarea) { const pos = before.length + displayMention.length + 1; textarea.focus(); textarea.setSelectionRange(pos, pos) }
     }, 0)
-  }, [mentionStart, value, onChange])
+  }, [mentionStart, displayValue, mentionTokens, onChange])
 
   const insertEmoji = useCallback((emoji: { native: string }) => {
     const textarea = textareaRef.current
-    const cursor = textarea?.selectionStart ?? value.length
-    const newValue = value.slice(0, cursor) + emoji.native + value.slice(cursor)
-    onChange(newValue)
+    const cursor = textarea?.selectionStart ?? displayValue.length
+    const newValue = displayValue.slice(0, cursor) + emoji.native + displayValue.slice(cursor)
+    setDisplayValue(newValue)
+    onChange(toStoredValue(newValue, mentionTokens))
     setShowEmojiPicker(false)
     setTimeout(() => {
       if (textarea) { const pos = cursor + emoji.native.length; textarea.focus(); textarea.setSelectionRange(pos, pos) }
     }, 0)
-  }, [value, onChange])
+  }, [displayValue, mentionTokens, onChange])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showDropdown && suggestions.length > 0) {
@@ -219,7 +273,7 @@ export function MentionTextarea({
       {/* Textarea */}
       <textarea
         ref={textareaRef}
-        value={value}
+        value={displayValue}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
@@ -324,6 +378,13 @@ export function MentionInput({
   const [isLoading, setIsLoading] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [displayValue, setDisplayValue] = useState(() => toDisplayValue(value))
+  const [mentionTokens, setMentionTokens] = useState<MentionToken[]>(() => parseMentionTokens(value))
+
+  useEffect(() => {
+    setDisplayValue(toDisplayValue(value))
+    setMentionTokens(parseMentionTokens(value))
+  }, [value])
 
   useEffect(() => {
     if (!query && query.length === 0) { setSuggestions([]); return }
@@ -351,9 +412,10 @@ export function MentionInput({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value
     const cursor = e.target.selectionStart ?? val.length
-    onChange(val)
+    setDisplayValue(val)
+    onChange(toStoredValue(val, mentionTokens))
     const textBefore = val.slice(0, cursor)
-    const atMatch = textBefore.match(/@([\w.]*)$/)
+    const atMatch = textBefore.match(/@([\p{L}\p{N}_.]*)$/u)
     if (atMatch) {
       setMentionStart(cursor - atMatch[0].length)
       setQuery(atMatch[1])
@@ -368,34 +430,38 @@ export function MentionInput({
 
   const insertMention = useCallback((user: MentionUser) => {
     if (mentionStart === null) return
-    const cursor = inputRef.current?.selectionStart ?? value.length
-    const before = value.slice(0, mentionStart)
-    const after = value.slice(cursor)
-    const token = `@[${user.displayName}](${user.userId})`
-    const newValue = before + token + ' ' + after
-    onChange(newValue)
+    const cursor = inputRef.current?.selectionStart ?? displayValue.length
+    const before = displayValue.slice(0, mentionStart)
+    const after = displayValue.slice(cursor)
+    const displayMention = `@${user.displayName}`
+    const newValue = before + displayMention + ' ' + after
+    const nextTokens = [...mentionTokens.filter(t => t.userId !== user.userId), { displayName: user.displayName, userId: user.userId }]
+    setDisplayValue(newValue)
+    setMentionTokens(nextTokens)
+    onChange(toStoredValue(newValue, nextTokens))
     setShowDropdown(false)
     setMentionStart(null)
     setQuery('')
     setTimeout(() => {
       if (inputRef.current) {
-        const pos = before.length + token.length + 1
+        const pos = before.length + displayMention.length + 1
         inputRef.current.focus()
         inputRef.current.setSelectionRange(pos, pos)
       }
     }, 0)
-  }, [mentionStart, value, onChange])
+  }, [mentionStart, displayValue, mentionTokens, onChange])
 
   const insertEmoji = useCallback((emoji: { native: string }) => {
     const input = inputRef.current
-    const cursor = input?.selectionStart ?? value.length
-    const newValue = value.slice(0, cursor) + emoji.native + value.slice(cursor)
-    onChange(newValue)
+    const cursor = input?.selectionStart ?? displayValue.length
+    const newValue = displayValue.slice(0, cursor) + emoji.native + displayValue.slice(cursor)
+    setDisplayValue(newValue)
+    onChange(toStoredValue(newValue, mentionTokens))
     setShowEmojiPicker(false)
     setTimeout(() => {
       if (input) { const pos = cursor + emoji.native.length; input.focus(); input.setSelectionRange(pos, pos) }
     }, 0)
-  }, [value, onChange])
+  }, [displayValue, mentionTokens, onChange])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (showDropdown && suggestions.length > 0) {
@@ -405,7 +471,7 @@ export function MentionInput({
       if (e.key === 'Escape') { e.preventDefault(); setShowDropdown(false); return }
       if (e.key === 'Enter') { e.preventDefault(); insertMention(suggestions[selectedIndex]); return }
     }
-    if (e.key === 'Enter' && !e.shiftKey && value.trim() && !showDropdown) {
+    if (e.key === 'Enter' && !e.shiftKey && displayValue.trim() && !showDropdown) {
       e.preventDefault()
       onSubmit?.()
     }
@@ -419,7 +485,7 @@ export function MentionInput({
       <input
         ref={inputRef}
         type="text"
-        value={value}
+        value={displayValue}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}

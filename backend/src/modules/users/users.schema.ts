@@ -13,6 +13,9 @@ export const updateProfileSchema = z.object({
     z.literal(''),
   ]).optional().nullable(),
   location: z.string().max(120).optional(),
+  school: z.string().max(120).optional(),
+  major: z.string().max(120).optional(),
+  cohort: z.string().max(50).optional(),
   profileVisibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
 })
 

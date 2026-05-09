@@ -24,13 +24,16 @@ export const usersApi = {
   getUserFriends: (id: string) =>
     apiClient.get<ApiResponse<any[]>>(`/users/${id}/friends`).then(r => (r.data.data ?? []).map(normalizeUser)),
 
-  updateProfile: (data: { displayName?: string; bio?: string; avatar?: string; coverPhoto?: string; location?: string; profileVisibility?: 'PUBLIC' | 'PRIVATE' }) =>
+  updateProfile: (data: { displayName?: string; bio?: string; avatar?: string; coverPhoto?: string; location?: string; school?: string; major?: string; cohort?: string; profileVisibility?: 'PUBLIC' | 'PRIVATE' }) =>
     apiClient.put<ApiResponse<any>>('/users/me', {
       displayName: data.displayName,
       bio: data.bio,
       avatarUrl: data.avatar,
       coverUrl: data.coverPhoto,
       location: data.location,
+      school: data.school,
+      major: data.major,
+      cohort: data.cohort,
       profileVisibility: data.profileVisibility,
     }).then(r => normalizeUser(r.data.data)),
 

@@ -57,7 +57,7 @@ export const usersRepository = {
     return results.map(r => sanitizeUser(r.u.properties))
   },
 
-  async update(userId: string, data: Partial<Pick<User, 'displayName' | 'bio' | 'avatarUrl' | 'coverUrl' | 'location' | 'profileVisibility'>> & { avatarUrl?: string | null; coverUrl?: string | null }): Promise<User | null> {
+  async update(userId: string, data: Partial<Pick<User, 'displayName' | 'bio' | 'avatarUrl' | 'coverUrl' | 'location' | 'school' | 'major' | 'cohort' | 'profileVisibility'>> & { avatarUrl?: string | null; coverUrl?: string | null }): Promise<User | null> {
     const now = new Date().toISOString()
     // Filter out undefined values but keep null (null = remove property in Neo4j)
     const filteredData = Object.fromEntries(
@@ -107,7 +107,11 @@ export const usersRepository = {
     const result = await runQueryOne<{ postsCount: number; friendsCount: number; groupsCount: number }>(
       `MATCH (u:User)
        WHERE replace(trim(coalesce(u.userId, '')), ' ', '-') = $normalizedId
-       RETURN COUNT { (u)-[:CREATED]->(:Post) } AS postsCount,
+       RETURN COUNT {
+                (u)-[:CREATED]->(p:Post)
+                WHERE (p.groupId IS NULL OR p.groupId = '' OR p.groupId = 'null')
+                  AND coalesce(p.visibility, p.privacy, 'PUBLIC') <> 'GROUP'
+              } AS postsCount,
               COUNT {
                 (u)-[fr]-(f:User)
                 WHERE type(fr) IN ['FRIENDS_WITH']

@@ -70,6 +70,50 @@ function scoreUser(user: UserPublic, keywordNorm: string): number {
   return best
 }
 
+function scoreMentionUser(user: UserPublic, keywordNorm: string): number {
+  const raw = user as UserPublic & { username?: string }
+  const fields = [
+    { value: raw.displayName, weight: 0 },
+    { value: raw.username ?? '', weight: -5 },
+    { value: raw.email, weight: -15 },
+  ]
+    .map(field => ({ ...field, value: normalizeForSearch(field.value) }))
+    .filter(field => field.value)
+
+  let best = 0
+  for (const field of fields) {
+    const words = field.value.split(/\s+/).filter(Boolean)
+
+    if (field.value === keywordNorm) best = Math.max(best, 120 + field.weight)
+    if (field.value.startsWith(keywordNorm)) best = Math.max(best, 100 + field.weight)
+
+    for (const word of words) {
+      if (word === keywordNorm) best = Math.max(best, 115 + field.weight)
+      if (word.startsWith(keywordNorm)) best = Math.max(best, 110 + field.weight)
+      if (keywordNorm.length >= 2 && word.includes(keywordNorm)) best = Math.max(best, 85 + field.weight)
+    }
+
+    if (keywordNorm.length >= 2 && field.value.includes(keywordNorm)) {
+      best = Math.max(best, 70 + field.weight)
+    }
+
+    // Fuzzy matching is useful for typos, but only after at least 3 chars.
+    if (keywordNorm.length >= 3) {
+      for (const word of words) {
+        const maxLen = Math.max(word.length, keywordNorm.length)
+        const similarity = 1 - levenshtein(word, keywordNorm) / maxLen
+        if (similarity >= 0.78) best = Math.max(best, Math.round(similarity * 65) + field.weight)
+      }
+    }
+  }
+
+  return best
+}
+
+function isCloudinaryAvatarUrl(value: unknown): value is string {
+  return typeof value === 'string' && value.startsWith('https://res.cloudinary.com/') && value.includes('/image/upload/')
+}
+
 function toSafePositiveInt(value: unknown): number {
   if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1
   if (typeof value === 'bigint') return value > 0n ? Number(value) : 1
@@ -232,14 +276,14 @@ export const usersService = {
     const totalUsers = toSafePositiveInt(await usersRepository.countAll())
     const candidates = await usersRepository.search('', totalUsers, 0, viewerId)
     return candidates
-      .map(user => ({ user, score: scoreUser(user, keywordNorm) }))
+      .map(user => ({ user, score: scoreMentionUser(user, keywordNorm) }))
       .filter(item => item.score > 0)
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => b.score - a.score || a.user.displayName.localeCompare(b.user.displayName))
       .slice(0, limit)
       .map(item => ({
         userId: item.user.userId,
         displayName: item.user.displayName,
-        avatarUrl: item.user.avatarUrl,
+        avatarUrl: isCloudinaryAvatarUrl(item.user.avatarUrl) ? item.user.avatarUrl : undefined,
       }))
   },
 }

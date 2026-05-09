@@ -42,6 +42,7 @@ export default function LoginPage() {
   const { setAuth } = useAuthStore()
   const toast = useToast()
   const [showPassword, setShowPassword] = useState(false)
+  const [loginError, setLoginError] = useState('')
 
   const {
     register,
@@ -53,13 +54,17 @@ export default function LoginPage() {
 
   const loginMutation = useMutation({
     mutationFn: authApi.login,
+    onMutate: () => {
+      setLoginError('')
+    },
     onSuccess: (data) => {
       setAuth(data.user, data.token)
       toast.success('Đăng nhập thành công!')
       navigate('/')
     },
     onError: (err) => {
-      toast.error(extractError(err))
+      const message = extractError(err)
+      setLoginError(message)
     },
   })
 
@@ -82,6 +87,15 @@ export default function LoginPage() {
           <h2 className='mb-6 text-center text-xl font-bold text-text-primary'>Đăng nhập</h2>
 
           <form onSubmit={handleSubmit((data) => loginMutation.mutate(data))} className='space-y-5' noValidate>
+            {loginError && (
+              <div
+                className='rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700'
+                role='alert'
+              >
+                {loginError}
+              </div>
+            )}
+
             <Input
               label='Email'
               type='email'
@@ -89,6 +103,7 @@ export default function LoginPage() {
               error={errors.email?.message}
               fullWidth
               autoComplete='email'
+              onInput={() => loginError && setLoginError('')}
               {...register('email')}
             />
             <Input
@@ -98,6 +113,7 @@ export default function LoginPage() {
               error={errors.password?.message}
               fullWidth
               autoComplete='current-password'
+              onInput={() => loginError && setLoginError('')}
               rightIcon={
                 <button
                   type='button'
