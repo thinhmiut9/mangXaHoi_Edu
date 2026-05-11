@@ -7,6 +7,8 @@ import { AppError } from '../../middleware/errorHandler'
 import { CreateDocumentDto, ListDocumentsQueryDto } from './documents.schema'
 import { documentsRepository, type DocumentRow } from './documents.repository'
 import { buildSignedRawAccessUrl, deleteCloudinaryAsset } from '../../utils/cloudinary'
+import { profanityService } from '../moderation/profanity.service'
+import { extractDocumentText } from './documentTextExtractor'
 
 function sanitizeBaseFileName(name: string): string {
   const ext = (path.extname(name || '') || '').toLowerCase()
@@ -64,9 +66,46 @@ function isFileHashConstraintError(err: unknown): boolean {
   )
 }
 
+function assertDocumentContentAllowed(dto: CreateDocumentDto, originalFileName: string, extractedText = '') {
+  const contentToScan = [
+    dto.title,
+    originalFileName,
+    dto.subject,
+    dto.school,
+    dto.major,
+    dto.cohort,
+    dto.description,
+    ...(dto.tags ?? []),
+    extractedText,
+  ]
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .join('\n')
+
+  if (!contentToScan) return
+
+  const result = profanityService.scanText(contentToScan, 'document')
+  if (result.action !== 'block') return
+
+  const matchedKeywords = result.matchedRules.map((rule) => rule.keyword).join(', ')
+  const message = 'Thông tin tài liệu chứa từ ngữ không phù hợp.'
+
+  throw new AppError(message, 422, 'PROFANITY_DETECTED', {
+    content: [`Matched keywords: ${matchedKeywords}`],
+  })
+}
+
 export const documentsService = {
   async create(userId: string, dto: CreateDocumentDto, file: Express.Multer.File | undefined) {
     if (!file) throw new AppError('Khong co file duoc tai len', 400, 'DOCUMENT_FILE_REQUIRED')
+
+    let extractedText = ''
+    try {
+      extractedText = await extractDocumentText(file.buffer, file.originalname)
+    } catch (error) {
+      console.warn('[documents] Failed to extract text for moderation:', file.originalname, error)
+    }
+
+    assertDocumentContentAllowed(dto, file.originalname, extractedText)
 
     const fileHash = createHash('sha256').update(file.buffer).digest('hex')
     const duplicatedDocument = await documentsRepository.findByFileHash(fileHash)

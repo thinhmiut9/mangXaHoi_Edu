@@ -3,9 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { documentsApi, type DocumentFileType } from '@/api/documents'
 import { extractError } from '@/api/client'
-import { chatApi } from '@/api/index'
+import { chatApi, reportsApi } from '@/api/index'
 import { friendsApi, usersApi } from '@/api/users'
 import { Avatar } from '@/components/ui/Avatar'
+import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { useAuthStore } from '@/store/authStore'
 
@@ -132,6 +134,9 @@ export default function DocumentsPage() {
   const [shareDoc, setShareDoc] = useState<{ id: string; title: string } | null>(null)
   const [shareKeyword, setShareKeyword] = useState('')
   const [shareUserId, setShareUserId] = useState('')
+  const [reportDoc, setReportDoc] = useState<{ id: string; title: string } | null>(null)
+  const [reportReason, setReportReason] = useState('INAPPROPRIATE')
+  const [reportDesc, setReportDesc] = useState('')
 
   const [openUpload, setOpenUpload] = useState(false)
   const [previewDoc, setPreviewDoc] = useState<{
@@ -271,6 +276,23 @@ export default function DocumentsPage() {
       setShareDoc(null)
       setShareKeyword('')
       setShareUserId('')
+    },
+    onError: (err) => toast.error(extractError(err)),
+  })
+
+  const reportMutation = useMutation({
+    mutationFn: () =>
+      reportsApi.create({
+        targetId: reportDoc!.id,
+        targetType: 'DOCUMENT',
+        reason: reportReason,
+        description: reportDesc.trim() || undefined,
+      }),
+    onSuccess: () => {
+      toast.success('Đã gửi báo cáo tài liệu')
+      setReportDoc(null)
+      setReportReason('INAPPROPRIATE')
+      setReportDesc('')
     },
     onError: (err) => toast.error(extractError(err)),
   })
@@ -444,6 +466,17 @@ export default function DocumentsPage() {
       const target = event.target as HTMLElement | null
       if (target?.closest('[data-doc-filter]')) return
       setOpenDropdown(null)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [])
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target?.closest('[data-doc-card-menu]')) return
+      setOpenCardMenuId(null)
     }
 
     document.addEventListener('pointerdown', handlePointerDown)
@@ -918,7 +951,7 @@ export default function DocumentsPage() {
                       </div>
                     </div>
 
-                    <div className='relative'>
+                    <div className='relative' data-doc-card-menu>
                       <button
                         type='button'
                         onClick={() => setOpenCardMenuId((current) => (current === doc.id ? null : doc.id))}
@@ -952,6 +985,17 @@ export default function DocumentsPage() {
                           >
                             <span>↗</span>
                             <span>Chia sẻ</span>
+                          </button>
+                          <button
+                            type='button'
+                            onClick={() => {
+                              setOpenCardMenuId(null)
+                              setReportDoc({ id: doc.id, title: doc.title })
+                            }}
+                            className='flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50'
+                          >
+                            <span>⚑</span>
+                            <span>Báo cáo tài liệu</span>
                           </button>
                         </div>
                       )}
@@ -1088,6 +1132,54 @@ export default function DocumentsPage() {
           </div>
         </div>
       </div>
+
+      <Modal
+        open={!!reportDoc}
+        onClose={() => setReportDoc(null)}
+        title='Báo cáo tài liệu'
+        footer={
+          <>
+            <Button variant='secondary' onClick={() => setReportDoc(null)}>
+              Hủy
+            </Button>
+            <Button
+              onClick={() => reportMutation.mutate()}
+              loading={reportMutation.isPending}
+              disabled={!reportReason || !reportDoc}
+            >
+              Gửi báo cáo
+            </Button>
+          </>
+        }
+      >
+        <div className='space-y-4'>
+          <div className='rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700'>
+            <span className='font-semibold'>Tài liệu:</span> {reportDoc?.title ?? ''}
+          </div>
+          <p className='text-sm text-slate-500'>
+            Vui lòng chọn lý do báo cáo tài liệu này. Quản trị viên sẽ xem xét và xử lý.
+          </p>
+          <select
+            value={reportReason}
+            onChange={(e) => setReportReason(e.target.value)}
+            className='h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300'
+          >
+            <option value='SPAM'>Spam</option>
+            <option value='INAPPROPRIATE'>Nội dung không phù hợp</option>
+            <option value='HARASSMENT'>Quấy rối</option>
+            <option value='FAKE_NEWS'>Thông tin sai lệch</option>
+            <option value='ABUSE'>Lạm dụng</option>
+            <option value='OTHER'>Khác</option>
+          </select>
+          <textarea
+            value={reportDesc}
+            onChange={(e) => setReportDesc(e.target.value)}
+            rows={4}
+            placeholder='Mô tả thêm (không bắt buộc)'
+            className='w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-300'
+          />
+        </div>
+      </Modal>
 
       <div
         className={`fixed inset-0 z-[70] transition ${openUpload ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'}`}

@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 export const createReportSchema = z.object({
   targetId: z.string().min(1),
-  targetType: z.enum(['POST', 'COMMENT', 'USER', 'GROUP']),
+  targetType: z.enum(['POST', 'COMMENT', 'USER', 'GROUP', 'DOCUMENT']),
   reason: z.enum(['SPAM', 'INAPPROPRIATE', 'HARASSMENT', 'FAKE_NEWS', 'ABUSE', 'OTHER']),
   description: z.string().max(1000).optional(),
 })

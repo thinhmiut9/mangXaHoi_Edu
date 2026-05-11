@@ -23,7 +23,7 @@ export default function AdminLayout() {
 
   const navItems = [
     { to: '/admin', label: 'Dashboard', icon: 'dashboard' },
-    { to: '/admin/users', label: 'Qu?n lý User', icon: 'users' },
+    { to: '/admin/users', label: 'Quản lý User', icon: 'users' },
     { to: '/admin/documents', label: 'Tài liệu', icon: 'documents' },
     { to: '/admin/reports', label: 'Báo cáo', icon: 'reports' },
   ] as const
@@ -88,7 +88,7 @@ export default function AdminLayout() {
               <path d="M16 17l5-5-5-5" />
               <path d="M21 12H9" />
             </svg>
-            <span>Ðang xu?t</span>
+            <span>Đăng xuất</span>
           </button>
           <div className="mt-4 border-t border-slate-200 pt-4 text-xs text-slate-400">© 2026 EduSocial</div>
         </div>

@@ -5,7 +5,6 @@ import { documentsRepository } from '../documents/documents.repository'
 import { documentsService } from '../documents/documents.service'
 import { buildSignedRawAccessUrl } from '../../utils/cloudinary'
 import { paginationMeta } from '../../utils/response'
-import { notificationsService } from '../notifications/notifications.service'
 
 function toNumberSafe(value: unknown): number {
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0
@@ -133,29 +132,15 @@ export const adminService = {
     const document = await documentsRepository.findById(documentId)
     if (!document) throw new AppError('Không tìm thấy tài liệu', 404, 'DOCUMENT_NOT_FOUND')
 
-    const updated = await documentsRepository.updateStatus(documentId, data.status, {
+    if (data.status === 'REJECTED') {
+      await documentsService.deleteAsAdmin(documentId)
+      return null
+    }
+
+    return documentsRepository.updateStatus(documentId, data.status, {
       reviewedBy,
       moderationNote: data.moderationNote,
     })
-
-    if (updated && data.status === 'REJECTED' && document.uploaderId) {
-      const documentTitle = updated.title?.trim() || updated.fileName?.trim() || 'tài liệu của bạn'
-      const moderationNote = data.moderationNote?.trim()
-      const content = moderationNote
-        ? `Tài liệu "${documentTitle}" đã bị từ chối duyệt. Lý do: ${moderationNote}`
-        : `Tài liệu "${documentTitle}" đã bị từ chối duyệt.`
-
-      await notificationsService.push({
-        recipientId: document.uploaderId,
-        senderId: reviewedBy,
-        type: 'ADMIN_ACTION',
-        entityId: documentId,
-        entityType: 'DOCUMENT',
-        content,
-      })
-    }
-
-    return updated
   },
 
   async deleteDocument(documentId: string) {

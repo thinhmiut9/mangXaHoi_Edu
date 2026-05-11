@@ -1,0 +1,284 @@
+[
+  {
+    "keyword": "dm",
+    "normalizedKeyword": "dm",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "dmm",
+    "normalizedKeyword": "dmm",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "dit",
+    "normalizedKeyword": "dit",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "dit me",
+    "normalizedKeyword": "dit me",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "du ma",
+    "normalizedKeyword": "du ma",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "du me",
+    "normalizedKeyword": "du me",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "du ma may",
+    "normalizedKeyword": "du ma may",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "vai",
+    "normalizedKeyword": "vai",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "vai lon",
+    "normalizedKeyword": "vai lon",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "lon",
+    "normalizedKeyword": "lon",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "mat lon",
+    "normalizedKeyword": "mat lon",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "cai lon",
+    "normalizedKeyword": "cai lon",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "lon me",
+    "normalizedKeyword": "lon me",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "vl",
+    "normalizedKeyword": "vl",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "vcl",
+    "normalizedKeyword": "vcl",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "vloz",
+    "normalizedKeyword": "vloz",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "vlon",
+    "normalizedKeyword": "vlon",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "vkl",
+    "normalizedKeyword": "vkl",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "cc",
+    "normalizedKeyword": "cc",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "cac",
+    "normalizedKeyword": "cac",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "cac lon",
+    "normalizedKeyword": "cac lon",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "cai cac",
+    "normalizedKeyword": "cai cac",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "cac me",
+    "normalizedKeyword": "cac me",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "deo",
+    "normalizedKeyword": "deo",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "dech",
+    "normalizedKeyword": "dech",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "dach",
+    "normalizedKeyword": "dach",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "me kiep",
+    "normalizedKeyword": "me kiep",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "khon nan",
+    "normalizedKeyword": "khon nan",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "suc vat",
+    "normalizedKeyword": "suc vat",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "thang cho",
+    "normalizedKeyword": "thang cho",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "ngu lon",
+    "normalizedKeyword": "ngu lon",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "ngu nhu cho",
+    "normalizedKeyword": "ngu nhu cho",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "oc cho",
+    "normalizedKeyword": "oc cho",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "an cut",
+    "normalizedKeyword": "an cut",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "do cho",
+    "normalizedKeyword": "do cho",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "do ngu",
+    "normalizedKeyword": "do ngu",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "ngu vai",
+    "normalizedKeyword": "ngu vai",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "ngu bo me",
+    "normalizedKeyword": "ngu bo me",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "bo lao",
+    "normalizedKeyword": "bo lao",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "cam mom",
+    "normalizedKeyword": "cam mom",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "im me mom",
+    "normalizedKeyword": "im me mom",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "cut me",
+    "normalizedKeyword": "cut me",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "cut con me may",
+    "normalizedKeyword": "cut con me may",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "bien me di",
+    "normalizedKeyword": "bien me di",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "bien me",
+    "normalizedKeyword": "bien me",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "ngu dot",
+    "normalizedKeyword": "ngu dot",
+    "action": "review",
+    "appliesTo": ["message", "comment", "post", "document"]
+  },
+  {
+    "keyword": "di me",
+    "normalizedKeyword": "di me",
+    "action": "block",
+    "appliesTo": ["message", "comment", "post", "document"]
+  }
+]

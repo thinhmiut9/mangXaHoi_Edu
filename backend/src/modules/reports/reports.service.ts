@@ -1,10 +1,12 @@
 import { reportsRepository } from './reports.repository'
 import { CreateReportDto } from './reports.schema'
 import { postsRepository } from '../posts/posts.repository'
+import { postsService } from '../posts/posts.service'
 import { commentsRepository } from '../comments/comments.repository'
 import { usersRepository } from '../users/users.repository'
 import { notificationsService } from '../notifications/notifications.service'
 import { forceLogoutUser } from '../../socket'
+import { documentsService } from '../documents/documents.service'
 
 type ResolveAction = 'MARK_ONLY' | 'HIDE_CONTENT' | 'LOCK_24H' | 'LOCK_7D'
 
@@ -47,14 +49,20 @@ export const reportsService = {
     if (!targetOwnerId && targetId && targetType === 'COMMENT') {
       targetOwnerId = (await commentsRepository.getCommentAuthorId(targetId)) || undefined
     }
+    if (!targetOwnerId && targetId && targetType === 'DOCUMENT') {
+      targetOwnerId = report?.target?.author?.userId || undefined
+    }
 
     if (payload.status === 'RESOLVED') {
       if (action === 'HIDE_CONTENT') {
         if (targetId && targetType === 'POST') {
-          await postsRepository.delete(targetId)
+          await postsService.deletePost(targetId, adminUserId, 'ADMIN')
         }
         if (targetId && targetType === 'COMMENT') {
           await commentsRepository.delete(targetId)
+        }
+        if (targetId && targetType === 'DOCUMENT') {
+          await documentsService.deleteAsAdmin(targetId)
         }
       }
 

@@ -20,6 +20,7 @@ export const reportsRepository = {
          WHERE commentTarget.commentId = $targetId OR commentTarget.id = $targetId
        OPTIONAL MATCH (userTarget:User {userId: $targetId})
        OPTIONAL MATCH (groupTarget:Group {groupId: $targetId})
+       OPTIONAL MATCH (documentTarget:Document {documentId: $targetId})
        CREATE (r:Report {
          reportId: $reportId, reason: $reason, description: $description,
          status: 'OPEN', targetId: $targetId, targetType: $targetType, createdAt: $now
@@ -36,6 +37,9 @@ export const reportsRepository = {
        )
        FOREACH (_ IN CASE WHEN $targetType = 'GROUP' AND groupTarget IS NOT NULL THEN [1] ELSE [] END |
          CREATE (r)-[:TARGETS]->(groupTarget)
+       )
+       FOREACH (_ IN CASE WHEN $targetType = 'DOCUMENT' AND documentTarget IS NOT NULL THEN [1] ELSE [] END |
+         CREATE (r)-[:TARGETS]->(documentTarget)
        )
        RETURN r`,
       { reportId, ...data, description: data.description ?? null, now }
@@ -62,9 +66,11 @@ export const reportsRepository = {
          WHERE toUpper(reportTargetType) = 'USER'
        OPTIONAL MATCH (groupTarget:Group {groupId: reportTargetId})
          WHERE toUpper(reportTargetType) = 'GROUP'
-       WITH r, reporter, reportTargetType, reportTargetId, coalesce(targetNodeByRel, postTarget, commentTarget, userTarget, groupTarget) AS targetNode
+       OPTIONAL MATCH (documentTarget:Document {documentId: reportTargetId})
+         WHERE toUpper(reportTargetType) = 'DOCUMENT'
+       WITH r, reporter, reportTargetType, reportTargetId, coalesce(targetNodeByRel, postTarget, commentTarget, userTarget, groupTarget, documentTarget) AS targetNode
        OPTIONAL MATCH (targetAuthor:User)-[authorRel]->(targetNode)
-         WHERE type(authorRel) IN ['CREATED', 'WROTE']
+         WHERE type(authorRel) IN ['CREATED', 'WROTE', 'UPLOADED_DOCUMENT']
        OPTIONAL MATCH (targetGroup:Group {groupId: targetNode.groupId})
        RETURN r {
          .*,
@@ -76,6 +82,7 @@ export const reportsRepository = {
            WHEN targetNode:Comment THEN 'COMMENT'
            WHEN targetNode:User THEN 'USER'
            WHEN targetNode:Group THEN 'GROUP'
+           WHEN targetNode:Document THEN 'DOCUMENT'
            ELSE ''
          END,
          createdAt: coalesce(toString(r.createdAt), ''),
@@ -94,6 +101,7 @@ export const reportsRepository = {
              WHEN targetNode:Comment THEN 'COMMENT'
              WHEN targetNode:User THEN 'USER'
              WHEN targetNode:Group THEN 'GROUP'
+             WHEN targetNode:Document THEN 'DOCUMENT'
              ELSE ''
            END,
            content: coalesce(targetNode.content, targetNode.description, ''),
@@ -145,9 +153,11 @@ export const reportsRepository = {
          WHERE toUpper(reportTargetType) = 'USER'
        OPTIONAL MATCH (groupTarget:Group {groupId: reportTargetId})
          WHERE toUpper(reportTargetType) = 'GROUP'
-       WITH r, reporter, reportTargetType, reportTargetId, coalesce(linkedTarget, postTarget, commentTarget, userTarget, groupTarget) AS targetNode
+       OPTIONAL MATCH (documentTarget:Document {documentId: reportTargetId})
+         WHERE toUpper(reportTargetType) = 'DOCUMENT'
+       WITH r, reporter, reportTargetType, reportTargetId, coalesce(linkedTarget, postTarget, commentTarget, userTarget, groupTarget, documentTarget) AS targetNode
        OPTIONAL MATCH (targetAuthor:User)-[authorRel]->(targetNode)
-         WHERE type(authorRel) IN ['CREATED', 'WROTE']
+         WHERE type(authorRel) IN ['CREATED', 'WROTE', 'UPLOADED_DOCUMENT']
        OPTIONAL MATCH (targetGroup:Group {groupId: targetNode.groupId})
        RETURN r {
          .*,
@@ -159,6 +169,7 @@ export const reportsRepository = {
            WHEN targetNode:Comment THEN 'COMMENT'
            WHEN targetNode:User THEN 'USER'
            WHEN targetNode:Group THEN 'GROUP'
+           WHEN targetNode:Document THEN 'DOCUMENT'
            ELSE ''
          END,
          createdAt: coalesce(toString(r.createdAt), ''),
@@ -175,6 +186,7 @@ export const reportsRepository = {
              WHEN targetNode:Comment THEN 'COMMENT'
              WHEN targetNode:User THEN 'USER'
              WHEN targetNode:Group THEN 'GROUP'
+             WHEN targetNode:Document THEN 'DOCUMENT'
              ELSE ''
            END,
            content: coalesce(targetNode.content, targetNode.description, ''),

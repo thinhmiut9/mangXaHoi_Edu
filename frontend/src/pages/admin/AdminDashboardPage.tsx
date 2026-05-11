@@ -75,6 +75,7 @@ function getTargetTypeLabel(type?: string) {
   if (normalized === 'COMMENT') return 'Bình luận'
   if (normalized === 'USER') return 'Người dùng'
   if (normalized === 'GROUP') return 'Nhóm'
+  if (normalized === 'DOCUMENT') return 'Tài liệu'
   return normalized
 }
 

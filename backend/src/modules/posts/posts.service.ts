@@ -17,6 +17,7 @@ import { groupsRepository } from '../groups/groups.repository'
 import { cloudinaryV2 } from '../../config/cloudinary'
 import { extractMentionedUserIds } from '../../utils/mention'
 import { usersRepository } from '../users/users.repository'
+import { profanityService } from '../moderation/profanity.service'
 
 function sanitizePostMedia(post: Post): Post {
   const imageUrls = filterCloudinaryImageUrls(post.imageUrls)
@@ -156,6 +157,18 @@ async function enrichPostsWithOriginal(posts: Post[]): Promise<Post[]> {
   })
 }
 
+function assertPostContentAllowed(content: string) {
+  const result = profanityService.scanText(content, 'post')
+  if (result.action !== 'block') return
+
+  const matchedKeywords = result.matchedRules.map((rule) => rule.keyword).join(', ')
+  const message = 'Nội dung bài viết chứa từ ngữ không phù hợp.'
+
+  throw new AppError(message, 422, 'PROFANITY_DETECTED', {
+    content: [`Matched keywords: ${matchedKeywords}`],
+  })
+}
+
 export const postsService = {
   async getFeed(viewerId: string, page: number, limit: number) {
     const skip = (page - 1) * limit
@@ -168,6 +181,8 @@ export const postsService = {
   },
 
   async createPost(userId: string, dto: CreatePostDto) {
+    assertPostContentAllowed(dto.content)
+
     if (dto.visibility === 'GROUP') {
       if (!dto.groupId) throw new AppError('Thiếu groupId cho bài viết nhóm', 400, 'GROUP_ID_REQUIRED')
       const group = await groupsRepository.findById(dto.groupId)
@@ -227,6 +242,9 @@ export const postsService = {
   async updatePost(postId: string, userId: string, dto: UpdatePostDto) {
     const isAuthor = await postsRepository.isAuthor(postId, userId)
     if (!isAuthor) throw new AppError('Bạn không có quyền chỉnh sửa bài viết này', 403, 'FORBIDDEN')
+    if (typeof dto.content === 'string') {
+      assertPostContentAllowed(dto.content)
+    }
     const hasMediaInput =
       dto.imageUrls !== undefined ||
       dto.videoUrls !== undefined ||
@@ -304,6 +322,9 @@ export const postsService = {
   async sharePost(postId: string, userId: string, caption?: string, visibility?: string) {
     const post = await postsRepository.findById(postId)
     if (!post) throw new AppError('Bài viết không tồn tại', 404, 'POST_NOT_FOUND')
+    if (typeof caption === 'string' && caption.trim()) {
+      assertPostContentAllowed(caption)
+    }
     return postsRepository.sharePost(postId, userId, uuidv4(), caption, visibility)
   },
 
