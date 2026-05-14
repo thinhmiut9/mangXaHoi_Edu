@@ -13,9 +13,11 @@
     "db:seed": "ts-node src/db/seed.ts",
     "db:ensure-admin": "ts-node src/db/ensureAdmin.ts",
     "db:migrate": "ts-node src/db/migrate.ts",
+    "db:fill-random-user-profiles": "ts-node src/db/fillRandomUserProfiles.ts",
     "db:randomize-placeholder-users": "ts-node src/db/randomizePlaceholderUsers.ts",
     "db:generate-neighborhood-data": "ts-node src/db/generateNeighborhoodData.ts",
     "db:restore-users-friendships": "ts-node src/db/restoreUsersAndFriendships.ts",
+    "db:export-users-friendships": "ts-node src/db/exportUsersAndFriendships.ts",
     "db:seed:cloudinary-images": "ts-node src/db/seedCloudinaryImages.ts",
     "db:assign:cloudinary-random": "ts-node src/db/assignFromCloudinary.ts"
   },

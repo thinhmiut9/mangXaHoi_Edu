@@ -58,6 +58,7 @@ export function TopBar() {
   const queryClient = useQueryClient()
   const location = useLocation()
   const isChatPage = location.pathname.startsWith('/chat')
+  const isSearchPage = location.pathname.startsWith('/search')
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false)
@@ -477,7 +478,7 @@ export function TopBar() {
           </Link>
         </div>
 
-        <form onSubmit={handleSearch} className="mx-auto w-full max-w-[520px]">
+        {!isSearchPage && <form onSubmit={handleSearch} className="mx-auto w-full max-w-[520px]">
           <div className="relative transition-all duration-300 focus-within:scale-[1.01]">
             <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -491,7 +492,7 @@ export function TopBar() {
               aria-label="Tìm kiếm"
             />
           </div>
-        </form>
+        </form>}
 
         <div className="flex items-center justify-end gap-2">
           <div ref={userMenuRef} className="relative">

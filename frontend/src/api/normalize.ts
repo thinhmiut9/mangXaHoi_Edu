@@ -30,7 +30,7 @@ export interface FrontendUser {
   lastOnlineAt?: string
   rank?: number
   similarityScore?: number
-  recommendationSource?: 'node2vec_file' | 'mutual_friends'
+  recommendationSource?: 'node2vec_file' | 'mutual_friends' | 'profile_rule_based'
   mutualCount?: number
 }
 

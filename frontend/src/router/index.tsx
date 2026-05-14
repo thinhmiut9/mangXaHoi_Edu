@@ -2,12 +2,14 @@ import { lazy, Suspense } from 'react'
 import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { Spinner } from '@/components/ui/Spinner'
+import { hasRequiredRecommendationProfile } from '@/utils/profileCompletion'
 
 // Lazy-loaded pages
 const LoginPage          = lazy(() => import('@/pages/auth/LoginPage'))
 const RegisterPage       = lazy(() => import('@/pages/auth/RegisterPage'))
 const ForgotPasswordPage = lazy(() => import('@/pages/auth/ForgotPasswordPage'))
 const ResetPasswordPage  = lazy(() => import('@/pages/auth/ResetPasswordPage'))
+const ProfileOnboardingPage = lazy(() => import('@/pages/auth/ProfileOnboardingPage'))
 
 const UserLayout         = lazy(() => import('@/components/layout/UserLayout'))
 const FeedPage           = lazy(() => import('@/pages/feed/FeedPage'))
@@ -52,6 +54,14 @@ function RequireUser() {
   return <Outlet />
 }
 
+function RequireProfileSetup() {
+  const { user } = useAuthStore()
+  if (user?.role === 'USER' && !hasRequiredRecommendationProfile(user)) {
+    return <Navigate to="/onboarding/profile" replace />
+  }
+  return <Outlet />
+}
+
 // Admin route guard
 function RequireAdmin() {
   const { user } = useAuthStore()
@@ -62,7 +72,12 @@ function RequireAdmin() {
 // Guest route (redirect to feed if already logged in)
 function GuestOnly() {
   const { isAuthenticated, user } = useAuthStore()
-  if (isAuthenticated) return <Navigate to={user?.role === 'ADMIN' ? '/admin' : '/'} replace />
+  if (isAuthenticated) {
+    if (user?.role === 'USER' && !hasRequiredRecommendationProfile(user)) {
+      return <Navigate to="/onboarding/profile" replace />
+    }
+    return <Navigate to={user?.role === 'ADMIN' ? '/admin' : '/'} replace />
+  }
   return <Outlet />
 }
 
@@ -73,6 +88,17 @@ const router = createBrowserRouter([
     children: [
       { path: '/login',          element: <LoginPage /> },
       { path: '/register',       element: <RegisterPage /> },
+    ],
+  },
+  {
+    element: <RequireAuth />,
+    children: [
+      {
+        element: <RequireUser />,
+        children: [
+          { path: '/onboarding/profile', element: <ProfileOnboardingPage /> },
+        ],
+      },
     ],
   },
   // Public password recovery routes (must remain accessible even when logged in)
@@ -86,22 +112,27 @@ const router = createBrowserRouter([
         element: <RequireUser />,
         children: [
           {
-            element: <UserLayout />,
+            element: <RequireProfileSetup />,
             children: [
-              { path: '/',                    element: <FeedPage /> },
-              { path: '/profile/:id',         element: <ProfilePage /> },
-              { path: '/friends',             element: <FriendsPage /> },
-              { path: '/search',              element: <SearchPage /> },
-              { path: '/saved',               element: <SavedPostsPage /> },
-              { path: '/posts/:id',           element: <PostDetailPage /> },
-              { path: '/groups',              element: <GroupsPage /> },
-              { path: '/groups/:id',          element: <GroupDetailPage /> },
-              { path: '/chat',                element: <ChatPage /> },
-              { path: '/chat/:conversationId', element: <ChatPage /> },
-              { path: '/notifications',       element: <NotificationsPage /> },
-              { path: '/documents',           element: <DocumentsPage /> },
-              { path: '/documents/saved',     element: <SavedDocumentsPage /> },
-              { path: '/documents/mine',      element: <MyUploadedDocumentsPage /> },
+              {
+                element: <UserLayout />,
+                children: [
+                  { path: '/',                    element: <FeedPage /> },
+                  { path: '/profile/:id',         element: <ProfilePage /> },
+                  { path: '/friends',             element: <FriendsPage /> },
+                  { path: '/search',              element: <SearchPage /> },
+                  { path: '/saved',               element: <SavedPostsPage /> },
+                  { path: '/posts/:id',           element: <PostDetailPage /> },
+                  { path: '/groups',              element: <GroupsPage /> },
+                  { path: '/groups/:id',          element: <GroupDetailPage /> },
+                  { path: '/chat',                element: <ChatPage /> },
+                  { path: '/chat/:conversationId', element: <ChatPage /> },
+                  { path: '/notifications',       element: <NotificationsPage /> },
+                  { path: '/documents',           element: <DocumentsPage /> },
+                  { path: '/documents/saved',     element: <SavedDocumentsPage /> },
+                  { path: '/documents/mine',      element: <MyUploadedDocumentsPage /> },
+                ],
+              },
             ],
           },
         ],

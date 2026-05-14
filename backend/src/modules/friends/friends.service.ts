@@ -1,7 +1,29 @@
 import { friendsRepository } from './friends.repository'
 import { AppError } from '../../middleware/errorHandler'
 import { notificationsService } from '../notifications/notifications.service'
-import { recommendationFileService } from './recommendationFile.service'
+import {
+  node2vecRecommendationFileService,
+  profileRecommendationFileService,
+  type RecommendationEntry,
+} from './recommendationFile.service'
+
+function applyRecommendationMetadata(
+  users: Awaited<ReturnType<typeof friendsRepository.getSuggestionsFromIds>>,
+  recommendations: RecommendationEntry[],
+  recommendationSource: 'node2vec_file' | 'profile_rule_based',
+) {
+  const metaByUserId = new Map(recommendations.map((item) => [item.recommendedUserId, item]))
+
+  return users.map((user) => {
+    const meta = metaByUserId.get(user.userId)
+    return {
+      ...user,
+      rank: meta?.rank ?? null,
+      similarityScore: meta?.similarityScore ?? null,
+      recommendationSource,
+    }
+  })
+}
 
 export const friendsService = {
   async getFriends(userId: string, page?: number, limit?: number) {
@@ -18,23 +40,20 @@ export const friendsService = {
   },
 
   async getSuggestions(userId: string, limit = 10) {
-    const fileRecommendations = recommendationFileService.getRecommendations(userId)
+    const friendsCount = await friendsRepository.countFriends(userId)
+    const recommendationService = friendsCount > 0
+      ? node2vecRecommendationFileService
+      : profileRecommendationFileService
+    const recommendationSource = friendsCount > 0 ? 'node2vec_file' : 'profile_rule_based'
+
+    const fileRecommendations = recommendationService.getRecommendations(userId)
 
     if (fileRecommendations.length > 0) {
       const recommendedIds = fileRecommendations.map((item) => item.recommendedUserId)
       const users = await friendsRepository.getSuggestionsFromIds(userId, recommendedIds, limit)
-      const metaByUserId = new Map(fileRecommendations.map((item) => [item.recommendedUserId, item]))
 
       if (users.length > 0) {
-        return users.map((user) => {
-          const meta = metaByUserId.get(user.userId)
-          return {
-            ...user,
-            rank: meta?.rank ?? null,
-            similarityScore: meta?.similarityScore ?? null,
-            recommendationSource: 'node2vec_file',
-          }
-        })
+        return applyRecommendationMetadata(users, fileRecommendations, recommendationSource)
       }
     }
 

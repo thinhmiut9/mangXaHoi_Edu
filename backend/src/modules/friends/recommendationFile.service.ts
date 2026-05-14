@@ -13,15 +13,20 @@ class RecommendationFileService {
   private cache: RecommendationMap | null = null
   private cacheKey: string | null = null
 
+  constructor(
+    private readonly envKey: string,
+    private readonly fallbackFileName: string,
+  ) {}
+
   private resolveFilePath(): string {
-    const configuredPath = process.env.NODE2VEC_RECOMMENDATIONS_FILE?.trim()
+    const configuredPath = process.env[this.envKey]?.trim()
     if (configuredPath) {
       return path.isAbsolute(configuredPath)
         ? configuredPath
         : path.resolve(__dirname, '../../../..', configuredPath)
     }
 
-    return path.resolve(__dirname, '../../../../', 'Data_Train_HeGoiY_Now', 'node2vec_recommendations_all_users.csv')
+    return path.resolve(__dirname, '../../../../', 'Data_Train_HeGoiY_Now', this.fallbackFileName)
   }
 
   private buildCache(filePath: string): RecommendationMap {
@@ -71,8 +76,16 @@ class RecommendationFileService {
   }
 
   hasData(): boolean {
-    return this.getRecommendations('__nonexistent__').length > -1 && this.load() !== null
+    return this.load() !== null
   }
 }
 
-export const recommendationFileService = new RecommendationFileService()
+export const node2vecRecommendationFileService = new RecommendationFileService(
+  'NODE2VEC_RECOMMENDATIONS_FILE',
+  'node2vec_recommendations_all_users.csv',
+)
+
+export const profileRecommendationFileService = new RecommendationFileService(
+  'PROFILE_RECOMMENDATIONS_FILE',
+  'profile_recommendations_all_users.csv',
+)
