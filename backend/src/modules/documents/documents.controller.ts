@@ -160,9 +160,9 @@ export const documentsController = {
         .sort((a, b) => (rankMap.get(a.documentId) ?? 999) - (rankMap.get(b.documentId) ?? 999))
         .slice(0, limit)
 
-      sendSuccess(res, result, 'Lay goi y tai lieu thanh cong', 200)
+      return sendSuccess(res, result, 'Lay goi y tai lieu thanh cong', 200)
     } catch (err) {
-      next(err)
+      return next(err)
     }
   },
 }
