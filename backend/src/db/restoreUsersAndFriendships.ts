@@ -9,10 +9,13 @@ interface UserImportRow {
   userId: string
   email: string
   displayName: string
-  bio?: string
+  interests?: string
   avatarUrl?: string
   coverUrl?: string
   location?: string
+  school?: string
+  major?: string
+  cohort?: string
   role: string
   status: string
   profileVisibility: string
@@ -122,10 +125,13 @@ function loadUsers(dataDir: string): UserImportRow[] {
     userId: row.userId.trim(),
     email: row.email.trim().toLowerCase(),
     displayName: row.displayName.trim(),
-    bio: emptyToNull(row.bio) ?? undefined,
+    interests: emptyToNull(row.interests ?? row.bio) ?? undefined,
     avatarUrl: emptyToNull(row.avatarUrl) ?? undefined,
     coverUrl: emptyToNull(row.coverUrl) ?? undefined,
     location: emptyToNull(row.location) ?? undefined,
+    school: emptyToNull(row.school) ?? undefined,
+    major: emptyToNull(row.major) ?? undefined,
+    cohort: emptyToNull(row.cohort) ?? undefined,
     role: row.role?.trim() || 'USER',
     status: row.status?.trim() || 'ACTIVE',
     profileVisibility: row.profileVisibility?.trim() || 'PUBLIC',
@@ -175,10 +181,13 @@ async function importUsers(users: UserImportRow[], defaultPasswordHash: string):
       SET
         u.email = row.email,
         u.displayName = row.displayName,
-        u.bio = row.bio,
+        u.interests = row.interests,
         u.avatarUrl = row.avatarUrl,
         u.coverUrl = row.coverUrl,
         u.location = row.location,
+        u.school = row.school,
+        u.major = row.major,
+        u.cohort = row.cohort,
         u.role = row.role,
         u.status = row.status,
         u.profileVisibility = row.profileVisibility,

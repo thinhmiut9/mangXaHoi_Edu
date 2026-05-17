@@ -15,7 +15,7 @@ export interface FrontendUser {
   email: string
   username: string
   displayName: string
-  bio?: string
+  interests?: string
   avatar?: string
   coverPhoto?: string
   location?: string
@@ -83,7 +83,7 @@ export function normalizeUser(raw: any): FrontendUser {
     email,
     username: raw?.username ?? (email.includes('@') ? email.split('@')[0] : ''),
     displayName: raw?.displayName ?? '',
-    bio: raw?.bio,
+    interests: raw?.interests ?? raw?.bio,
     avatar: isCloudinaryImageUrl(avatar) ? avatar : undefined,
     coverPhoto: isCloudinaryImageUrl(coverPhoto) ? coverPhoto : undefined,
     location: raw?.location,

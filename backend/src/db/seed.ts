@@ -28,7 +28,7 @@ async function seed(): Promise<void> {
     `CREATE (u:User {
       id: $id, email: $email, username: $username, displayName: $displayName,
       passwordHash: $passwordHash, role: 'ADMIN', status: 'ACTIVE',
-      bio: $bio, createdAt: $now, updatedAt: $now
+      interests: $interests, createdAt: $now, updatedAt: $now
     })`,
     {
       id: adminId,
@@ -36,7 +36,7 @@ async function seed(): Promise<void> {
       username: 'admin',
       displayName: 'Quản trị viên',
       passwordHash: adminPassword,
-      bio: 'EduSocial Administrator',
+      interests: 'Quan tri he thong va phat trien cong dong hoc tap',
       now,
     }
   )
@@ -44,11 +44,11 @@ async function seed(): Promise<void> {
 
   // Create sample users
   const sampleUsers = [
-    { email: 'alice@example.com', username: 'alice_nguyen', displayName: 'Alice Nguyễn', bio: 'Sinh viên năm 3 CNTT 💻' },
-    { email: 'bob@example.com', username: 'bob_tran', displayName: 'Bob Trần', bio: 'Yêu thích lập trình và cà phê ☕' },
-    { email: 'charlie@example.com', username: 'charlie_le', displayName: 'Charlie Lê', bio: 'Học máy & AI enthusiast 🤖' },
-    { email: 'diana@example.com', username: 'diana_pham', displayName: 'Diana Phạm', bio: 'Designer & Frontend developer 🎨' },
-    { email: 'evan@example.com', username: 'evan_hoang', displayName: 'Evan Hoàng', bio: 'Backend developer | Node.js lover' },
+    { email: 'alice@example.com', username: 'alice_nguyen', displayName: 'Alice Nguyễn', interests: 'Sinh vien nam 3 CNTT, thich hoc nhom va chia se tai lieu' },
+    { email: 'bob@example.com', username: 'bob_tran', displayName: 'Bob Trần', interests: 'Lap trinh web, ca phe va trao doi bai tap cung ban be' },
+    { email: 'charlie@example.com', username: 'charlie_le', displayName: 'Charlie Lê', interests: 'Hoc may, AI va cac du an phan tich du lieu' },
+    { email: 'diana@example.com', username: 'diana_pham', displayName: 'Diana Phạm', interests: 'UI UX, frontend va hoc theo du an thuc te' },
+    { email: 'evan@example.com', username: 'evan_hoang', displayName: 'Evan Hoàng', interests: 'Backend, Node.js va he thong phan tan' },
   ]
 
   const userIds: string[] = []
@@ -59,7 +59,7 @@ async function seed(): Promise<void> {
       `CREATE (u:User {
         id: $id, email: $email, username: $username, displayName: $displayName,
         passwordHash: $passwordHash, role: 'USER', status: 'ACTIVE',
-        bio: $bio, createdAt: $now, updatedAt: $now
+        interests: $interests, createdAt: $now, updatedAt: $now
       })`,
       { id, passwordHash: userPassword, now, ...u }
     )

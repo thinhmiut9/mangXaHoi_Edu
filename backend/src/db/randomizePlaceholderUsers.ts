@@ -8,7 +8,7 @@ type PlaceholderUserRow = {
   userId: string
   displayName: string
   originalNumber: string
-  bio?: string | null
+  interests?: string | null
 }
 
 const firstNames = [
@@ -82,7 +82,7 @@ const middleNames = [
   'Bao',
 ]
 
-const bios = [
+const interestsPool = [
   'Sinh vien yeu thich hoc tap va chia se tai lieu',
   'Dang hoc CNTT va quan tam den cong nghe moi',
   'Thich ket noi voi ban be cung truong',
@@ -126,7 +126,7 @@ async function randomizePlaceholderUsers(): Promise<void> {
      RETURN u.userId AS userId,
             u.displayName AS displayName,
             originalNumber,
-            u.bio AS bio
+            coalesce(u.interests, u.bio) AS interests
      ORDER BY toInteger(originalNumber) ASC`
   )
 
@@ -138,12 +138,12 @@ async function randomizePlaceholderUsers(): Promise<void> {
   const names = buildNamePool(users.length)
   const now = new Date().toISOString()
   const rows = users.map((user, index) => {
-    const isPlaceholderBio = !user.bio || /^Day la user so [0-9]+$/i.test(user.bio.trim())
+    const isPlaceholderInterests = !user.interests || /^Day la user so [0-9]+$/i.test(user.interests.trim())
 
     return {
       userId: user.userId,
       displayName: names[index],
-      bio: isPlaceholderBio ? bios[index % bios.length] : user.bio,
+      interests: isPlaceholderInterests ? interestsPool[index % interestsPool.length] : user.interests,
       username: `${names[index].toLowerCase().replace(/\s+/g, '_')}_${user.originalNumber}`,
     }
   })
@@ -153,7 +153,7 @@ async function randomizePlaceholderUsers(): Promise<void> {
      MATCH (u:User {userId: row.userId})
      SET u.displayName = row.displayName,
          u.username = row.username,
-         u.bio = row.bio,
+         u.interests = row.interests,
          u.updatedAt = $now
      RETURN count(u) AS updated`,
     { rows, now }

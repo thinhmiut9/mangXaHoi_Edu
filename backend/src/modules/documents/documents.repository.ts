@@ -32,6 +32,12 @@ export interface DocumentRow {
   moderationNote?: string
 }
 
+export interface DocumentFacets {
+  schools: string[]
+  majors: string[]
+  cohorts: string[]
+}
+
 interface CreateDocumentData extends CreateDocumentDto {
   documentId: string
   fileName: string
@@ -56,6 +62,59 @@ function toSafeNumber(value: unknown): number {
   return 0
 }
 
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter((value) => value.trim().length > 0)))
+}
+
+function buildSchoolVariants(value: string): string[] {
+  const trimmed = value.trim()
+  if (!trimmed) return []
+
+  const variants = [trimmed]
+
+  if (/^đh\s+/i.test(trimmed)) {
+    variants.push(trimmed.replace(/^đh\s+/i, 'Đại học '))
+  }
+  if (/^dh\s+/i.test(trimmed)) {
+    variants.push(trimmed.replace(/^dh\s+/i, 'Đại học '))
+  }
+  if (/^đại học\s+/i.test(trimmed)) {
+    variants.push(trimmed.replace(/^đại học\s+/i, 'ĐH '))
+  }
+
+  return uniqueStrings(variants)
+}
+
+function buildMajorVariants(value: string): string[] {
+  const trimmed = value.trim()
+  if (!trimmed) return []
+
+  const variants = [trimmed]
+  const lowered = trimmed.toLowerCase()
+
+  if (lowered === 'cntt') variants.push('Công nghệ thông tin')
+  if (lowered === 'công nghệ thông tin') variants.push('CNTT')
+  if (lowered === 'truyển thông') variants.push('Truyền thông')
+  if (lowered === 'truyền thông') variants.push('Truyển thông')
+
+  return uniqueStrings(variants)
+}
+
+function canonicalSchoolLabel(value: string): string {
+  const trimmed = value.trim()
+  if (/^đh\s+/i.test(trimmed)) return trimmed.replace(/^đh\s+/i, 'Đại học ')
+  if (/^dh\s+/i.test(trimmed)) return trimmed.replace(/^dh\s+/i, 'Đại học ')
+  return trimmed
+}
+
+function canonicalMajorLabel(value: string): string {
+  const trimmed = value.trim()
+  const lowered = trimmed.toLowerCase()
+  if (lowered === 'cntt') return 'Công nghệ thông tin'
+  if (lowered === 'truyển thông') return 'Truyền thông'
+  return trimmed
+}
+
 function buildWhere(query: ListDocumentsQueryDto, viewerId: string) {
   const where: string[] = [
     `coalesce(d.status, 'ACTIVE') = 'ACTIVE'`,
@@ -78,12 +137,12 @@ function buildWhere(query: ListDocumentsQueryDto, viewerId: string) {
   }
 
   if (query.school) {
-    params.school = query.school
-    where.push(`d.school = $school`)
+    params.schoolValues = buildSchoolVariants(query.school)
+    where.push(`d.school IN $schoolValues`)
   }
   if (query.major) {
-    params.major = query.major
-    where.push(`d.major = $major`)
+    params.majorValues = buildMajorVariants(query.major)
+    where.push(`d.major IN $majorValues`)
   }
   if (query.fileType) {
     params.fileType = query.fileType
@@ -173,8 +232,8 @@ export const documentsRepository = {
 
     const rows = await runQuery<{ row: DocumentRow }>(
       `MATCH (d:Document)
-       OPTIONAL MATCH (u:User {userId: d.uploaderId})
        ${whereClause}
+       OPTIONAL MATCH (u:User {userId: d.uploaderId})
        WITH d, u
        ${orderBy}
        SKIP toInteger($skip)
@@ -193,7 +252,6 @@ export const documentsRepository = {
 
     const countRow = await runQueryOne<{ total: number }>(
       `MATCH (d:Document)
-       OPTIONAL MATCH (u:User {userId: d.uploaderId})
        ${whereClause}
        RETURN count(d) AS total`,
       params
@@ -202,6 +260,36 @@ export const documentsRepository = {
     return {
       rows: rows.map(item => item.row),
       total: toSafeNumber(countRow?.total),
+    }
+  },
+
+  async getFacets(): Promise<DocumentFacets> {
+    const rows = await runQuery<{ school?: string; major?: string; cohort?: string }>(
+      `MATCH (d:Document)
+       WHERE coalesce(d.status, 'ACTIVE') = 'ACTIVE'
+         AND coalesce(d.visibility, 'PUBLIC') = 'PUBLIC'
+       RETURN d.school AS school, d.major AS major, d.cohort AS cohort`
+    )
+
+    const collect = (field: 'school' | 'major' | 'cohort') => {
+      const rawValues = rows
+        .map((row) => row[field])
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+
+      const normalizedValues =
+        field === 'school'
+          ? rawValues.map(canonicalSchoolLabel)
+          : field === 'major'
+            ? rawValues.map(canonicalMajorLabel)
+            : rawValues.map((value) => value.trim())
+
+      return Array.from(new Set(normalizedValues)).sort((a, b) => a.localeCompare(b))
+    }
+
+    return {
+      schools: collect('school'),
+      majors: collect('major'),
+      cohorts: collect('cohort'),
     }
   },
 
@@ -488,5 +576,28 @@ export const documentsRepository = {
        DETACH DELETE d`,
       { documentId }
     )
+  },
+
+  async getByIds(viewerId: string, documentIds: string[]): Promise<DocumentRow[]> {
+    if (documentIds.length === 0) return []
+
+    const rows = await runQuery<{ row: DocumentRow }>(
+      `UNWIND $documentIds AS docId
+       MATCH (d:Document {documentId: docId})
+       WHERE coalesce(d.status, 'ACTIVE') = 'ACTIVE'
+         AND coalesce(d.visibility, 'PUBLIC') = 'PUBLIC'
+       OPTIONAL MATCH (u:User {userId: d.uploaderId})
+       RETURN d {
+         .documentId, .title, .fileName, .fileUrl, .previewUrl, .fileType, .subject,
+         .school, .major, .cohort, .description, .tags, .visibility, .status,
+         .viewsCount, .downloadsCount, .uploaderId, .createdAt, .updatedAt,
+         isSaved: EXISTS { (:User {userId: $viewerId})-[:SAVED_DOCUMENT]->(d) },
+         uploaderName: u.displayName,
+         uploaderAvatar: u.avatarUrl
+       } AS row`,
+      { documentIds, viewerId }
+    )
+
+    return rows.map(r => r.row)
   },
 }

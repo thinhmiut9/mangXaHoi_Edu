@@ -34,14 +34,15 @@ export const usersRepository = {
   },
 
   async search(query: string, limit = 10, skip = 0, viewerId?: string): Promise<UserPublic[]> {
+    const q = query.trim()
     const results = await runQuery<{ u: { properties: User } }>(
       `MATCH (u:User)
        OPTIONAL MATCH (viewer:User {userId: $viewerId})
        WHERE u.status = 'ACTIVE' AND (
-         toLower(coalesce(u.displayName, '')) CONTAINS toLower($query) OR
-         toLower(coalesce(u.username, '')) CONTAINS toLower($query) OR
-         toLower(coalesce(u.email, '')) CONTAINS toLower($query) OR
-         toLower(coalesce(u.location, '')) CONTAINS toLower($query)
+         toLower(coalesce(u.displayName, '')) CONTAINS toLower($q) OR
+         toLower(coalesce(u.username, ''))    CONTAINS toLower($q) OR
+         toLower(coalesce(u.email, ''))       CONTAINS toLower($q) OR
+         toLower(coalesce(u.location, ''))    CONTAINS toLower($q)
        )
        AND ($viewerId = '' OR u.userId <> $viewerId)
        AND (
@@ -52,12 +53,12 @@ export const usersRepository = {
        RETURN u
        ORDER BY u.displayName
        SKIP toInteger($skip) LIMIT toInteger($limit)`,
-      { query, limit, skip, viewerId: viewerId ?? '' }
+      { q, limit, skip, viewerId: viewerId ?? '' }
     )
     return results.map(r => sanitizeUser(r.u.properties))
   },
 
-  async update(userId: string, data: Partial<Pick<User, 'displayName' | 'bio' | 'avatarUrl' | 'coverUrl' | 'location' | 'school' | 'major' | 'cohort' | 'profileVisibility'>> & { avatarUrl?: string | null; coverUrl?: string | null }): Promise<User | null> {
+  async update(userId: string, data: Partial<Pick<User, 'displayName' | 'interests' | 'avatarUrl' | 'coverUrl' | 'location' | 'school' | 'major' | 'cohort' | 'profileVisibility'>> & { avatarUrl?: string | null; coverUrl?: string | null }): Promise<User | null> {
     const now = new Date().toISOString()
     // Filter out undefined values but keep null (null = remove property in Neo4j)
     const filteredData = Object.fromEntries(

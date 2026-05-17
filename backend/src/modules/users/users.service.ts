@@ -49,21 +49,25 @@ function scoreUser(user: UserPublic, keywordNorm: string): number {
     .map(v => normalizeForSearch(v))
     .filter(Boolean)
 
+  const kwWords = keywordNorm.split(/\s+/).filter(Boolean)
+
   let best = 0
   for (const field of fields) {
-    if (field === keywordNorm) best = Math.max(best, 100)
-    else if (field.startsWith(keywordNorm)) best = Math.max(best, 90)
-    else if (field.includes(keywordNorm)) best = Math.max(best, 80)
+    // Full phrase match
+    if (field === keywordNorm) return 100
+    if (field.startsWith(keywordNorm)) { best = Math.max(best, 95); continue }
+    if (field.includes(keywordNorm)) { best = Math.max(best, 85); continue }
 
-    const words = field.split(/\s+/).filter(Boolean)
-    for (const word of words) {
-      if (word.startsWith(keywordNorm) || keywordNorm.startsWith(word)) {
-        best = Math.max(best, 75)
-      }
-      const maxLen = Math.max(word.length, keywordNorm.length)
-      if (maxLen >= 3) {
-        const similarity = 1 - levenshtein(word, keywordNorm) / maxLen
-        if (similarity >= 0.7) best = Math.max(best, Math.round(similarity * 70))
+    // All keyword words must appear somewhere in the field
+    const allWordsMatch = kwWords.every(kw => field.includes(kw))
+    if (allWordsMatch && kwWords.length > 1) { best = Math.max(best, 80); continue }
+
+    // At least one keyword word matches a field word (exact or prefix)
+    const fieldWords = field.split(/\s+/).filter(Boolean)
+    for (const kw of kwWords) {
+      for (const fw of fieldWords) {
+        if (fw === kw) best = Math.max(best, 70)
+        else if (fw.startsWith(kw) && kw.length >= 2) best = Math.max(best, 60)
       }
     }
   }
@@ -227,17 +231,20 @@ export const usersService = {
     if (!keyword) return { users: [], meta: paginationMeta(page, limit, 0) }
 
     const keywordNorm = normalizeForSearch(keyword)
-    const totalUsers = toSafePositiveInt(await usersRepository.countAll())
-    const candidates = await usersRepository.search('', totalUsers, 0, viewerId)
 
-    const ranked = candidates
-      .map(user => ({ user, score: scoreUser(user, keywordNorm) }))
-      .filter(item => item.score > 0)
-      .sort((a, b) => b.score - a.score || a.user.displayName.localeCompare(b.user.displayName))
+    // Load all active users (no keyword filter — Neo4j CONTAINS can't strip diacritics)
+    const totalCount = toSafePositiveInt(await usersRepository.countAll())
+    const allUsers = await usersRepository.search('', totalCount, 0, viewerId)
+
+    // Filter: keep users whose normalized fields include the normalized keyword
+    const matched = allUsers.filter(user => {
+      const fields = [user.displayName, user.email, user.location ?? ''].map(normalizeForSearch)
+      return fields.some(f => f.includes(keywordNorm))
+    })
 
     const skip = (page - 1) * limit
-    const users = ranked.slice(skip, skip + limit).map(item => item.user)
-    return { users, meta: paginationMeta(page, limit, ranked.length) }
+    const users = matched.slice(skip, skip + limit)
+    return { users, meta: paginationMeta(page, limit, matched.length) }
   },
 
   async searchAll(viewerId: string, q: string, limit: number) {

@@ -152,7 +152,7 @@ export function LeftSidebar() {
           {/* Label fades in on hover */}
           <div className='min-w-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap overflow-hidden'>
             <p className='truncate text-sm font-semibold text-slate-800 leading-tight'>{user?.displayName}</p>
-            <p className='truncate text-xs text-slate-400'>{user?.bio?.trim() || 'Thành viên EduSocial'}</p>
+            <p className='truncate text-xs text-slate-400'>{user?.interests?.trim() || 'Thanh vien EduSocial'}</p>
           </div>
         </Link>
 

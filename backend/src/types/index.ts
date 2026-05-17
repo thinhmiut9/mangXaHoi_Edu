@@ -30,7 +30,7 @@ export interface User {
   email: string
   passwordHash: string
   displayName: string
-  bio?: string
+  interests?: string
   avatarUrl?: string
   coverUrl?: string
   location?: string
@@ -51,7 +51,7 @@ export interface UserPublic {
   userId: string
   email: string
   displayName: string
-  bio?: string
+  interests?: string
   avatarUrl?: string
   coverUrl?: string
   location?: string

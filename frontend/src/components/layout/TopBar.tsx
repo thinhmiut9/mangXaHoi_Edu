@@ -458,7 +458,7 @@ export function TopBar() {
 
       <div
         className={cn(
-          'hidden grid-cols-[minmax(0,1fr)_minmax(0,520px)_minmax(0,1fr)] items-center gap-3 px-4 transition-all duration-300 ease-out md:grid',
+          'hidden items-center gap-3 px-4 transition-all duration-300 ease-out md:flex',
           scrolled ? 'h-12' : 'h-14'
         )}
       >
@@ -478,7 +478,7 @@ export function TopBar() {
           </Link>
         </div>
 
-        {!isSearchPage && <form onSubmit={handleSearch} className="mx-auto w-full max-w-[520px]">
+        {!isSearchPage && <form onSubmit={handleSearch} className="mx-auto w-full max-w-[520px] flex-1">
           <div className="relative transition-all duration-300 focus-within:scale-[1.01]">
             <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -494,7 +494,7 @@ export function TopBar() {
           </div>
         </form>}
 
-        <div className="flex items-center justify-end gap-2">
+        <div className="ml-auto flex items-center gap-2">
           <div ref={userMenuRef} className="relative">
             <button
               onClick={() => setShowUserMenu(m => !m)}

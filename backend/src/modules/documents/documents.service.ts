@@ -160,6 +160,10 @@ export const documentsService = {
     }
   },
 
+  async getFacets() {
+    return documentsRepository.getFacets()
+  },
+
   async getSaved(userId: string, page: number, limit: number) {
     const skip = (page - 1) * limit
     const { rows, total } = await documentsRepository.getSavedDocuments(userId, skip, limit)
@@ -247,5 +251,10 @@ export const documentsService = {
     }
 
     await documentsRepository.delete(documentId)
+  },
+
+  async getByIds(viewerId: string, documentIds: string[]) {
+    if (documentIds.length === 0) return []
+    return documentsRepository.getByIds(viewerId, documentIds)
   },
 }

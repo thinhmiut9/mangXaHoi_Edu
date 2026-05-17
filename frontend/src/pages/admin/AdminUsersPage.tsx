@@ -9,7 +9,7 @@ interface AdminUserRow {
   userId: string
   displayName: string
   email: string
-  bio?: string
+  interests?: string
   location?: string
   role?: 'USER' | 'ADMIN'
   status?: 'ACTIVE' | 'BLOCKED'
@@ -250,8 +250,8 @@ export default function AdminUsersPage() {
             </div>
 
             <div className="rounded-xl border border-slate-200 p-3">
-              <p className="mb-1 text-xs text-slate-500">Bio</p>
-              <p className="text-sm text-slate-700">{detailQuery.data.bio || 'Chưa cập nhật bio.'}</p>
+              <p className="mb-1 text-xs text-slate-500">Interests</p>
+              <p className="text-sm text-slate-700">{detailQuery.data.interests || 'Chua cap nhat interests.'}</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -286,4 +286,3 @@ export default function AdminUsersPage() {
     </div>
   )
 }
-

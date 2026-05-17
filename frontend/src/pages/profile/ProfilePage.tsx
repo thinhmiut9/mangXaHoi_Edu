@@ -29,7 +29,7 @@ type StatLabel = 'Bài viết' | 'Bạn bè' | 'Nhóm' | 'Tài liệu' | 'Kỹ n
 
 type EditProfileForm = {
   displayName: string
-  bio: string
+  interests: string
   location: string
   school: string
   major: string
@@ -47,7 +47,7 @@ const VISIBILITY_LABEL: Record<'PUBLIC' | 'FRIENDS' | 'PRIVATE', string> = {
 
 const EMPTY_FORM: EditProfileForm = {
   displayName: '',
-  bio: '',
+  interests: '',
   location: '',
   school: '',
   major: '',
@@ -244,7 +244,7 @@ export default function ProfilePage() {
 
       return usersApi.updateProfile({
         displayName: editForm.displayName.trim(),
-        bio: editForm.bio.trim(),
+        interests: editForm.interests.trim(),
         location: editForm.location.trim(),
         school: editForm.school.trim(),
         major: editForm.major.trim(),
@@ -265,7 +265,7 @@ export default function ProfilePage() {
       if (currentUser?.id === id) {
         updateUser({
           displayName: updatedUser.displayName,
-          bio: updatedUser.bio,
+          interests: updatedUser.interests,
           location: updatedUser.location,
           school: updatedUser.school,
           major: updatedUser.major,
@@ -414,7 +414,7 @@ export default function ProfilePage() {
     if (!profile) return
     setEditForm({
       displayName: editableText(profile.displayName),
-      bio: editableText(profile.bio),
+      interests: editableText(profile.interests),
       location: editableText(profile.location),
       school: editableText(profile.school),
       major: editableText(profile.major),
@@ -664,8 +664,8 @@ export default function ProfilePage() {
                     {profile.displayName}
                   </h1>
                   <p className="mt-0.5 text-slate-500 text-sm">@{profile.username || profile.email?.split('@')[0]}</p>
-                  {profile.bio && (
-                    <p className="mt-1 text-sm text-slate-700 line-clamp-2">{profile.bio}</p>
+                  {profile.interests && (
+                    <p className="mt-1 text-sm text-slate-700 line-clamp-2">{profile.interests}</p>
                   )}
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] sm:text-[13px] text-slate-500">
                     {profile.school && (
@@ -833,7 +833,7 @@ export default function ProfilePage() {
           <div className="bg-white rounded-2xl border border-border-light p-4 shadow-card space-y-2">
             <h3 className="text-lg font-semibold text-slate-900">Giới thiệu</h3>
             <p className="text-sm text-slate-600">Tên hiển thị: <span className="font-medium text-slate-900">{profile.displayName}</span></p>
-            <p className="text-sm text-slate-600">Tiểu sử: <span className="font-medium text-slate-900">{profile.bio || 'Chưa cập nhật'}</span></p>
+            <p className="text-sm text-slate-600">So thich hoc tap: <span className="font-medium text-slate-900">{profile.interests || 'Chua cap nhat'}</span></p>
             <p className="text-sm text-slate-600">Trường: <span className="font-medium text-slate-900">{profile.school || 'Chưa cập nhật'}</span></p>
             <p className="text-sm text-slate-600">Chuyên ngành: <span className="font-medium text-slate-900">{profile.major || 'Chưa cập nhật'}</span></p>
             <p className="text-sm text-slate-600">Khóa: <span className="font-medium text-slate-900">{profile.cohort || 'Chưa cập nhật'}</span></p>
@@ -875,7 +875,7 @@ export default function ProfilePage() {
                   <Avatar src={friend.avatar} name={friend.displayName} size="md" />
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-slate-900 truncate">{friend.displayName}</p>
-                    <p className="text-xs text-slate-500 truncate">{friend.bio || `@${friend.username}`}</p>
+                    <p className="text-xs text-slate-500 truncate">{friend.interests || `@${friend.username}`}</p>
                   </div>
                 </Link>
               ))}
@@ -961,9 +961,9 @@ export default function ProfilePage() {
           />
 
           <TextArea
-            label="Tiểu sử"
-            value={editForm.bio}
-            onChange={(e) => setEditForm((prev) => ({ ...prev, bio: e.target.value }))}
+            label="So thich hoc tap"
+            value={editForm.interests}
+            onChange={(e) => setEditForm((prev) => ({ ...prev, interests: e.target.value }))}
             rows={3}
             maxLength={300}
           />

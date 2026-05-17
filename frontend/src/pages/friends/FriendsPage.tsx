@@ -33,7 +33,7 @@ function UserCard({ user, actions, online }: { user: User; actions: UserCardActi
         <Link to={`/profile/${user.id}`} className="text-sm font-semibold text-text-primary hover:underline block truncate">
           {user.displayName}
         </Link>
-        <p className="text-xs text-text-secondary truncate">{user.bio || `@${user.username}`}</p>
+        <p className="text-xs text-text-secondary truncate">{user.interests || `@${user.username}`}</p>
         {online !== undefined && (
           <p className={`text-xs mt-0.5 ${online ? 'text-success-500' : 'text-text-muted'}`}>
             {online ? 'Đang hoạt động' : 'Không hoạt động'}

@@ -12,6 +12,8 @@ type AcademicProfile = {
   major: string
 }
 
+const cohorts = Array.from({ length: 16 }, (_, index) => `K${30 + index}`)
+
 const locations = [
   'Ha Noi, Viet Nam',
   'Hai Phong, Viet Nam',
@@ -33,20 +35,48 @@ const locations = [
 
 const academicProfiles: AcademicProfile[] = [
   { school: 'Đại học Bách khoa Hà Nội', major: 'Công nghệ thông tin' },
-  { school: 'Đại học Công nghệ - ĐHQGHN', major: 'Khoa học máy tính' },
+  { school: 'Đại học Công nghệ - ĐHQGHN', major: 'Khoa học dữ liệu' },
   { school: 'Học viện Công nghệ Bưu chính Viễn thông', major: 'Hệ thống thông tin' },
-  { school: 'Đại học FPT', major: 'Kỹ thuật phần mềm' },
-  { school: 'Đại học Kinh tế Quốc dân', major: 'Thương mại điện tử' },
-  { school: 'Đại học Sư phạm Kỹ thuật Đà Nẵng', major: 'Công nghệ thông tin' },
-  { school: 'Đại học Bách khoa - Đại học Đà Nẵng', major: 'Khoa học dữ liệu' },
-  { school: 'Đại học Quy Nhơn', major: 'Hệ thống thông tin' },
-  { school: 'Đại học Nha Trang', major: 'Công nghệ phần mềm' },
-  { school: 'Đại học Cần Thơ', major: 'Mạng máy tính và truyền thông dữ liệu' },
-  { school: 'Đại học Công nghệ Thông tin - ĐHQG TP.HCM', major: 'Khoa học máy tính' },
-  { school: 'Đại học Bách khoa TP.HCM', major: 'Kỹ thuật máy tính' },
-  { school: 'Đại học Khoa học Tự nhiên - ĐHQG TP.HCM', major: 'Khoa học dữ liệu' },
-  { school: 'Đại học Ngân hàng TP.HCM', major: 'Hệ thống thông tin quản lý' },
-  { school: 'Đại học Sài Gòn', major: 'Công nghệ thông tin' },
+  { school: 'Đại học FPT', major: 'An toàn thông tin' },
+  { school: 'Đại học Sư phạm Kỹ thuật Đà Nẵng', major: 'Kỹ thuật phần mềm' },
+  { school: 'Đại học Kinh tế Quốc dân', major: 'Kinh tế' },
+  { school: 'Đại học Kinh tế Quốc dân', major: 'Quản trị kinh doanh' },
+  { school: 'Đại học Thương mại', major: 'Kinh doanh quốc tế' },
+  { school: 'Đại học Lao động - Xã hội', major: 'Quản trị nhân lực' },
+  { school: 'Học viện Ngân hàng', major: 'Tài chính ngân hàng' },
+  { school: 'Đại học Kinh tế TP.HCM', major: 'Kế toán' },
+  { school: 'Đại học Kinh tế - Luật', major: 'Kiểm toán' },
+  { school: 'Đại học Tài chính - Marketing', major: 'Marketing' },
+  { school: 'Đại học Văn Lang', major: 'Digital Marketing' },
+  { school: 'Học viện Báo chí và Tuyên truyền', major: 'Truyền thông đa phương tiện' },
+  { school: 'Đại học Khoa học Xã hội và Nhân văn - ĐHQGHN', major: 'Quan hệ công chúng' },
+  { school: 'Đại học Y Hà Nội', major: 'Y khoa' },
+  { school: 'Đại học Y Dược TP.HCM', major: 'Dược học' },
+  { school: 'Đại học Điều dưỡng Nam Định', major: 'Điều dưỡng' },
+  { school: 'Đại học Y tế Công cộng', major: 'Y tế công cộng' },
+  { school: 'Đại học Luật Hà Nội', major: 'Luật kinh tế' },
+  { school: 'Đại học Luật TP.HCM', major: 'Luật dân sự' },
+  { school: 'Đại học Kinh tế - Luật', major: 'Luật thương mại' },
+  { school: 'Đại học Sư phạm Hà Nội', major: 'Sư phạm' },
+  { school: 'Đại học Sư phạm TP.HCM', major: 'Quản lý giáo dục' },
+  { school: 'Đại học Quy Nhơn', major: 'Giáo dục tiểu học' },
+  { school: 'Đại học Hà Nội', major: 'Ngôn ngữ Anh' },
+  { school: 'Đại học Ngoại ngữ - ĐHQGHN', major: 'Ngôn ngữ Nhật' },
+  { school: 'Đại học Ngoại ngữ - Đại học Đà Nẵng', major: 'Ngôn ngữ Hàn' },
+  { school: 'Đại học Mở TP.HCM', major: 'Biên phiên dịch' },
+  { school: 'Đại học Văn hóa Hà Nội', major: 'Quản trị du lịch' },
+  { school: 'Đại học Kinh tế TP.HCM', major: 'Quản trị khách sạn' },
+  { school: 'Đại học Duy Tân', major: 'Hướng dẫn du lịch' },
+  { school: 'Đại học Xây dựng Hà Nội', major: 'Kỹ thuật xây dựng' },
+  { school: 'Đại học Kiến trúc Hà Nội', major: 'Kiến trúc' },
+  { school: 'Đại học Kiến trúc TP.HCM', major: 'Quản lý xây dựng' },
+  { school: 'Học viện Nông nghiệp Việt Nam', major: 'Nông học' },
+  { school: 'Đại học Cần Thơ', major: 'Công nghệ thực phẩm' },
+  { school: 'Đại học Nông Lâm TP.HCM', major: 'Chăn nuôi' },
+  { school: 'Đại học Nông Lâm Huế', major: 'Bảo vệ thực vật' },
+  { school: 'Đại học Tài nguyên và Môi trường Hà Nội', major: 'Khoa học môi trường' },
+  { school: 'Đại học Khoa học Tự nhiên - ĐHQG TP.HCM', major: 'Quản lý tài nguyên' },
+  { school: 'Đại học Tài nguyên và Môi trường TP.HCM', major: 'Biến đổi khí hậu' },
 ]
 
 function hashString(input: string): number {
@@ -92,6 +122,7 @@ async function fillRandomUserProfiles(): Promise<void> {
       location,
       school: academicProfile.school,
       major: academicProfile.major,
+      cohort: pickBySeed(cohorts, seed * 13 + 29),
     }
   })
 
@@ -102,6 +133,7 @@ async function fillRandomUserProfiles(): Promise<void> {
     SET u.location = row.location,
         u.school = row.school,
         u.major = row.major,
+        u.cohort = row.cohort,
         u.updatedAt = $now
     RETURN count(u) AS updated
     `,
@@ -111,7 +143,7 @@ async function fillRandomUserProfiles(): Promise<void> {
   console.log(`Updated profile fields for ${rows.length} users.`)
   console.log('Sample rows:')
   for (const row of rows.slice(0, 10)) {
-    console.log(`  ${row.userId} -> ${row.location} | ${row.school} | ${row.major}`)
+    console.log(`  ${row.userId} -> ${row.location} | ${row.school} | ${row.major} | ${row.cohort}`)
   }
 }
 

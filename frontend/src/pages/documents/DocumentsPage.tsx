@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { documentsApi, type DocumentFileType } from '@/api/documents'
+import { documentsApi, type DocumentFileType, type RecommendedDocument } from '@/api/documents'
 import { extractError } from '@/api/client'
 import { chatApi, reportsApi } from '@/api/index'
 import { friendsApi, usersApi } from '@/api/users'
@@ -52,9 +52,15 @@ function getPreviewHint(type: DocumentFileType): string {
 }
 
 const typeClassMap: Record<DocumentFileType, string> = {
-  PDF: 'bg-rose-500',
-  DOC: 'bg-blue-500',
-  PPT: 'bg-amber-500',
+  PDF: 'bg-gradient-to-br from-rose-500 to-pink-600',
+  DOC: 'bg-gradient-to-br from-blue-500 to-indigo-600',
+  PPT: 'bg-gradient-to-br from-amber-400 to-orange-500',
+}
+
+const typeIconMap: Record<DocumentFileType, string> = {
+  PDF: '📄',
+  DOC: '📝',
+  PPT: '📊',
 }
 
 function cannotPreviewMessage(type: DocumentFileType): string {
@@ -103,21 +109,22 @@ function FilterDropdown({
                 key={option.value}
                 type='button'
                 onClick={() => onSelect(option.value)}
-                className={`flex min-h-11 w-full items-center px-3 text-left text-sm transition ${
-                  option.value === value ? 'bg-blue-50 font-semibold text-blue-600' : 'text-slate-700 hover:bg-slate-50'
-                }`}
+                className={`flex min-h-11 w-full items-center px-3 text-left text-sm transition ${option.value === value ? 'bg-blue-50 font-semibold text-blue-600' : 'text-slate-700 hover:bg-slate-50'
+                  }`}
               >
                 <span className='truncate'>{option.label}</span>
               </button>
             ))}
           </div>
-          </div>
-        )}
+        </div>
+      )}
     </div>
   )
 }
 
 export default function DocumentsPage() {
+  const DOCUMENTS_PER_PAGE = 12
+  const RECOMMENDATIONS_LIMIT = 20
   const queryClient = useQueryClient()
   const toast = useToast()
   const navigate = useNavigate()
@@ -129,12 +136,14 @@ export default function DocumentsPage() {
   const [filterType, setFilterType] = useState<'ALL' | DocumentFileType>('ALL')
   const [filterTime, setFilterTime] = useState<'ALL' | '7D' | '30D' | '90D'>('ALL')
   const [sortBy, setSortBy] = useState<'NEWEST' | 'POPULAR' | 'RATING'>('NEWEST')
+  const [currentPage, setCurrentPage] = useState(1)
   const [openDropdown, setOpenDropdown] = useState<null | 'school' | 'major' | 'type' | 'time' | 'sort'>(null)
   const [openCardMenuId, setOpenCardMenuId] = useState<string | null>(null)
   const [shareDoc, setShareDoc] = useState<{ id: string; title: string } | null>(null)
   const [shareKeyword, setShareKeyword] = useState('')
   const [shareUserId, setShareUserId] = useState('')
   const [reportDoc, setReportDoc] = useState<{ id: string; title: string } | null>(null)
+  const [showAllRecs, setShowAllRecs] = useState(false)
   const [reportReason, setReportReason] = useState('INAPPROPRIATE')
   const [reportDesc, setReportDesc] = useState('')
 
@@ -180,33 +189,24 @@ export default function DocumentsPage() {
   }, [selectedFileName])
 
   const { data, isLoading, isFetching, error } = useQuery({
-    queryKey: ['documents-library'],
+    queryKey: ['documents-library', query, filterSchool, filterMajor, filterType, filterTime, sortBy, currentPage],
     queryFn: () =>
       documentsApi.list({
-        q: '',
-        school: '',
-        major: '',
-        fileType: '',
-        timeRange: 'ALL',
-        sortBy: 'NEWEST',
-        page: 1,
-        limit: 50,
+        q: query,
+        school: filterSchool === 'ALL' ? '' : filterSchool,
+        major: filterMajor === 'ALL' ? '' : filterMajor,
+        fileType: filterType === 'ALL' ? '' : filterType,
+        timeRange: filterTime,
+        sortBy,
+        page: currentPage,
+        limit: DOCUMENTS_PER_PAGE,
       }),
+    placeholderData: (prev) => prev, // Giữ data trang cũ trong khi fetch trang mới — tránh totalPages reset về 1
   })
 
   const { data: facetData } = useQuery({
     queryKey: ['documents-facets'],
-    queryFn: () =>
-      documentsApi.list({
-        q: '',
-        school: '',
-        major: '',
-        fileType: '',
-        timeRange: 'ALL',
-        sortBy: 'NEWEST',
-        page: 1,
-        limit: 50,
-      }),
+    queryFn: documentsApi.getFacets,
   })
 
   const { data: friendUsers = [] } = useQuery({
@@ -308,23 +308,18 @@ export default function DocumentsPage() {
     () => (data?.data ?? []).filter((doc) => doc.status === 'ACTIVE'),
     [data?.data]
   )
+  const recommendationSeedDocuments = allDocuments
   const collectUploadOptions = (field: UploadSuggestField) => {
-    const values = [...(facetData?.data ?? []), ...allDocuments]
+    const values = allDocuments
       .map((doc) => doc[field])
       .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
 
     return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b))
   }
-  const subjectOptions = useMemo(() => collectUploadOptions('subject'), [allDocuments, facetData?.data])
-  const majorOptions = useMemo(() => {
-    return collectUploadOptions('major')
-  }, [allDocuments, facetData?.data])
-  const schoolOptions = useMemo(() => {
-    return collectUploadOptions('school')
-  }, [allDocuments, facetData?.data])
-  const cohortOptions = useMemo(() => {
-    return collectUploadOptions('cohort')
-  }, [allDocuments, facetData?.data])
+  const subjectOptions = useMemo(() => collectUploadOptions('subject'), [allDocuments])
+  const majorOptions = useMemo(() => facetData?.majors ?? [], [facetData?.majors])
+  const schoolOptions = useMemo(() => facetData?.schools ?? [], [facetData?.schools])
+  const cohortOptions = useMemo(() => facetData?.cohorts ?? [], [facetData?.cohorts])
   const uploadSuggestOptions = useMemo<Record<UploadSuggestField, string[]>>(
     () => ({
       subject: subjectOptions,
@@ -368,52 +363,29 @@ export default function DocumentsPage() {
     return Array.from(dedup.values())
   }, [friendUsers, searchedUsers, shareKeyword, user?.id])
 
-  const documents = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase()
-    const now = Date.now()
+  // Backend đã lọc + phân trang đúng — không cần re-filter ở client
+  const documents = allDocuments
 
-    const filtered = allDocuments.filter((doc) => {
-      const searchableValues = [
-        doc.title,
-        doc.subject,
-        doc.school,
-        doc.major,
-        doc.cohort,
-        doc.description,
-        ...(doc.tags ?? []),
-      ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+  // Gợi ý tài liệu từ model đã train — gọi API backend
+  const { data: recommendedDocuments = [], isLoading: isRecsLoading } = useQuery<RecommendedDocument[]>({
+    queryKey: ['document-recommendations'],
+    queryFn: () => documentsApi.getRecommendations(20),
+    staleTime: 5 * 60 * 1000, // cache 5 phút
+    retry: false,
+  })
 
-      const matchesQuery = !normalizedQuery || searchableValues.some((value) => value.toLowerCase().includes(normalizedQuery))
-      const matchesSchool = filterSchool === 'ALL' || (doc.school ?? '') === filterSchool
-      const matchesMajor = filterMajor === 'ALL' || (doc.major ?? '') === filterMajor
-      const matchesType = filterType === 'ALL' || doc.type === filterType
+  const meta = data?.meta
+  const totalDocuments = meta?.total ?? 0
+  const totalPages = Math.max(1, meta?.totalPages ?? 1)
 
-      const createdAtTime = Date.parse(doc.createdAt || '')
-      const matchesTime =
-        filterTime === 'ALL' ||
-        (Number.isFinite(createdAtTime) &&
-          ((filterTime === '7D' && now - createdAtTime <= 7 * 24 * 60 * 60 * 1000) ||
-            (filterTime === '30D' && now - createdAtTime <= 30 * 24 * 60 * 60 * 1000) ||
-            (filterTime === '90D' && now - createdAtTime <= 90 * 24 * 60 * 60 * 1000)))
+  const paginationItems = useMemo(() => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1)
 
-      return matchesQuery && matchesSchool && matchesMajor && matchesType && matchesTime
-    })
+    if (currentPage <= 4) return [1, 2, 3, 4, 5, '...', totalPages] as const
+    if (currentPage >= totalPages - 3) return [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages] as const
 
-    filtered.sort((a, b) => {
-      if (sortBy === 'POPULAR') {
-        if (b.views !== a.views) return b.views - a.views
-        return Date.parse(b.createdAt || '') - Date.parse(a.createdAt || '')
-      }
-      if (sortBy === 'RATING') {
-        if (b.downloads !== a.downloads) return b.downloads - a.downloads
-        if (b.views !== a.views) return b.views - a.views
-        return Date.parse(b.createdAt || '') - Date.parse(a.createdAt || '')
-      }
-      return Date.parse(b.createdAt || '') - Date.parse(a.createdAt || '')
-    })
-
-    return filtered
-  }, [allDocuments, filterMajor, filterSchool, filterTime, filterType, query, sortBy])
+    return [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages] as const
+  }, [currentPage, totalPages])
 
   const previewUrl =
     previewDoc?.type === 'PDF'
@@ -460,6 +432,21 @@ export default function DocumentsPage() {
       if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl)
     }
   }, [previewBlobUrl])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filterMajor, filterSchool, filterTime, filterType, query, sortBy])
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
+  // Scroll lên đầu trang khi chuyển trang — chạy sau render nên không xung đột
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [currentPage])
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -907,92 +894,93 @@ export default function DocumentsPage() {
           </div>
         </div>
 
-        <div className='documents-cards-grid mt-3'>
-          {(isLoading || isFetching) && (
-            <div className='rounded-xl border border-slate-200 bg-white py-8 text-center text-sm font-medium text-slate-500'>
-              Đang tải tài liệu...
+        <div className='mt-3'>
+          {/* Section header */}
+          <div className='mb-3 flex items-center justify-between'>
+            <div>
+              <p className='text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400'>Kho tài liệu</p>
+              <h2 className='text-lg font-black text-slate-800'>
+                Tài liệu nổi bật
+                {totalDocuments > 0 && <span className='ml-2 text-sm font-semibold text-slate-400'>{totalDocuments} tài liệu</span>}
+              </h2>
             </div>
-          )}
-          {error && (
-            <div className='rounded-xl border border-rose-200 bg-rose-50 px-3 py-4 text-sm font-medium text-rose-700'>
-              {extractError(error)}
-            </div>
-          )}
-
-          {!isLoading && !error && documents.length === 0 && (
-            <div className='rounded-xl border border-dashed border-slate-300 bg-white py-10 text-center text-sm font-medium text-slate-500'>
-              Không có tài liệu phù hợp với bộ lọc hiện tại.
-            </div>
-          )}
-
-          {!isLoading &&
-            !error &&
-            documents.map((doc) => (
-            <article key={doc.id} className='documents-card rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:shadow-md sm:p-3'>
-              <div className='documents-card-main flex items-start gap-3'>
-                <div className='relative mt-0.5 flex-shrink-0'>
-                  <div className={`grid h-[64px] w-[46px] place-items-center rounded-[10px] text-sm font-extrabold text-white sm:h-[60px] sm:w-[42px] sm:text-xs ${typeClassMap[doc.type]}`}>
-                    {doc.type}
-                  </div>
-                  <span className='absolute right-0 top-0 h-3 w-3 rounded-bl-md bg-white/35' />
+          </div>
+          <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4'>
+              {(isLoading || isFetching) && (
+                <div className='rounded-xl border border-slate-200 bg-white py-8 text-center text-sm font-medium text-slate-500'>
+                  Đang tải tài liệu...
                 </div>
+              )}
+              {error && (
+                <div className='rounded-xl border border-rose-200 bg-rose-50 px-3 py-4 text-sm font-medium text-rose-700'>
+                  {extractError(error)}
+                </div>
+              )}
 
-                <div className='documents-card-content min-w-0 flex-1'>
-                  <div className='flex items-start justify-between gap-3'>
-                    <div className='min-w-0'>
-                      <h3 className='line-clamp-2 text-xl font-bold leading-tight text-slate-800 sm:truncate sm:text-[22px]'>{doc.title}</h3>
-                      <div className='mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[15px] text-slate-500 sm:text-sm'>
-                        <span>{doc.subject ? `Môn: ${doc.subject}` : 'Môn: Chưa cập nhật'}</span>
-                        <span className='font-semibold text-blue-600'>{doc.major || 'Chưa cập nhật ngành'}</span>
-                      </div>
-                      <div className='mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[15px] text-slate-500 sm:text-sm'>
-                        <span>{doc.school || 'Chưa cập nhật trường'}</span>
-                        <span>{doc.cohort || 'Chưa cập nhật khóa'}</span>
-                      </div>
+              {!isLoading && !isFetching && !error && documents.length === 0 && (
+                <div className='rounded-xl border border-dashed border-slate-300 bg-white py-10 text-center text-sm font-medium text-slate-500'>
+                  Không có tài liệu phù hợp với bộ lọc hiện tại.
+                </div>
+              )}
+
+              {!isLoading &&
+                !error &&
+                documents.map((doc) => (
+                  <article key={doc.id} className='group relative flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md'>
+
+                    {/* Cover header — gradient + decorative */}
+                    <div className={`relative h-[80px] w-full overflow-hidden rounded-t-2xl ${typeClassMap[doc.type]}`}>
+                      {/* Big decorative icon background */}
+                      <span className='absolute -right-2 -top-2 select-none text-[72px] opacity-10'>
+                        {typeIconMap[doc.type]}
+                      </span>
+                      {/* Decorative circles */}
+                      <span className='absolute -bottom-4 -left-4 h-16 w-16 rounded-full bg-white/10' />
+                      <span className='absolute -bottom-2 left-8 h-8 w-8 rounded-full bg-white/10' />
+
+                      {/* File type badge */}
+                      <span className='absolute left-3 top-3 rounded-lg bg-white/25 px-2 py-0.5 text-[11px] font-extrabold text-white backdrop-blur-sm'>
+                        {doc.type}
+                      </span>
+
+                      {/* Gradient fade */}
+                      <div className='absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black/30 to-transparent' />
                     </div>
 
-                    <div className='relative' data-doc-card-menu>
+                    {/* Menu button — outside cover so it's not clipped */}
+                    <div className='absolute right-2 top-2 z-30' data-doc-card-menu>
                       <button
                         type='button'
                         onClick={() => setOpenCardMenuId((current) => (current === doc.id ? null : doc.id))}
-                        className='grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 sm:h-8 sm:w-8'
+                        className='grid h-7 w-7 place-items-center rounded-lg bg-white/20 text-white backdrop-blur-sm hover:bg-white/30'
                         aria-label='Tùy chọn tài liệu'
                         aria-expanded={openCardMenuId === doc.id}
                       >
                         ...
                       </button>
                       {openCardMenuId === doc.id && (
-                        <div className='absolute right-0 top-[calc(100%+6px)] z-20 min-w-[150px] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg'>
+                        <div className='absolute right-0 top-[calc(100%+4px)] z-50 min-w-[160px] rounded-xl border border-slate-200 bg-white shadow-xl'>
                           <button
                             type='button'
-                            onClick={() => {
-                              setOpenCardMenuId(null)
-                              saveMutation.mutate(doc.id)
-                            }}
+                            onClick={() => { setOpenCardMenuId(null); saveMutation.mutate(doc.id) }}
                             disabled={saveMutation.isPending}
-                            className='flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50'
+                            className='flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-t-xl'
                           >
-                            <span>□</span>
+                            <span className='text-slate-400'>□</span>
                             <span>{doc.isSaved ? 'Bỏ lưu tài liệu' : 'Lưu tài liệu'}</span>
                           </button>
                           <button
                             type='button'
-                            onClick={() => {
-                              setOpenCardMenuId(null)
-                              setShareDoc({ id: doc.id, title: doc.title })
-                            }}
-                            className='flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50'
+                            onClick={() => { setOpenCardMenuId(null); setShareDoc({ id: doc.id, title: doc.title }) }}
+                            className='flex w-full items-center gap-2.5 border-t border-slate-100 px-3 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50'
                           >
-                            <span>↗</span>
+                            <span className='text-slate-400'>↗</span>
                             <span>Chia sẻ</span>
                           </button>
                           <button
                             type='button'
-                            onClick={() => {
-                              setOpenCardMenuId(null)
-                              setReportDoc({ id: doc.id, title: doc.title })
-                            }}
-                            className='flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50'
+                            onClick={() => { setOpenCardMenuId(null); setReportDoc({ id: doc.id, title: doc.title }) }}
+                            className='flex w-full items-center gap-2.5 border-t border-slate-100 px-3 py-2.5 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-b-xl'
                           >
                             <span>⚑</span>
                             <span>Báo cáo tài liệu</span>
@@ -1000,56 +988,231 @@ export default function DocumentsPage() {
                         </div>
                       )}
                     </div>
-                  </div>
 
-                  <div className='mt-3 flex flex-wrap items-center gap-2 text-[13px] text-slate-500 sm:text-xs'>
-                    <Avatar src={doc.uploaderAvatar} name={doc.uploaderName || 'Người dùng EduSocial'} size='xs' />
-                    <span>Người đăng:</span>
-                    <span className='font-semibold text-slate-600'>{doc.uploaderName || 'Người dùng EduSocial'}</span>
-                    <span>•</span>
-                    <span>{formatRelativeTime(doc.createdAt)}</span>
-                  </div>
+                    {/* Body */}
+                    <div className='flex flex-1 flex-col p-3'>
+                      {/* Title */}
+                      <h3 className='line-clamp-2 text-sm font-bold leading-tight text-slate-800'>{doc.title}</h3>
 
-                  {!!(doc.tags ?? []).length && (
-                    <div className='mt-2 flex flex-wrap gap-2'>
-                      {(doc.tags ?? []).map((tag) => (
-                        <span key={tag} className='text-xs font-semibold text-indigo-500'>
-                          {tag}
+                      {/* Subject + Major */}
+                      <p className='mt-1 truncate text-[11px] text-slate-500'>
+                        {doc.subject ? `Môn: ${doc.subject}` : 'Môn: Chưa cập nhật'}
+                      </p>
+                      <p className='truncate text-[11px] font-semibold text-blue-600'>{doc.major || ''}</p>
+                      <p className='truncate text-[11px] text-slate-400'>{doc.school || ''}</p>
+
+                      {/* Uploader */}
+                      <button
+                        type='button'
+                        onClick={() => doc.uploaderId && navigate(`/profile/${doc.uploaderId}`)}
+                        className='mt-2 flex items-center gap-1.5 text-left transition hover:opacity-80'
+                      >
+                        <Avatar src={doc.uploaderAvatar} name={doc.uploaderName || 'Người dùng'} size='xs' />
+                        <span className='truncate text-[11px] font-semibold text-blue-600 hover:underline'>
+                          {doc.uploaderName || 'Người dùng EduSocial'}
                         </span>
-                      ))}
+                        <span className='shrink-0 text-[10px] text-slate-400'>• {formatRelativeTime(doc.createdAt)}</span>
+                      </button>
+
+                      {/* Tags */}
+                      {!!(doc.tags ?? []).length && (
+                        <div className='mt-1.5 flex flex-wrap gap-1'>
+                          {(doc.tags ?? []).slice(0, 3).map((tag) => (
+                            <span key={tag} className='text-[10px] font-semibold text-indigo-500'>{tag}</span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Actions + Stats */}
+                      <div className='mt-auto pt-3'>
+                        <div className='flex gap-1.5'>
+                          <button
+                            type='button'
+                            onClick={() => handleDownload(doc.id, doc.fileName || `${doc.title}.${doc.type.toLowerCase()}`)}
+                            className='flex flex-1 items-center justify-center gap-1 rounded-lg bg-blue-600 py-1.5 text-xs font-semibold text-white hover:bg-blue-700'
+                          >
+                            <span>↓</span> Tải xuống
+                          </button>
+                          <button
+                            type='button'
+                            onClick={() => void handlePreviewOpen(doc)}
+                            className='flex flex-1 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50'
+                          >
+                            <span>◉</span> Xem trước
+                          </button>
+                        </div>
+                        <div className='mt-2 flex gap-2 text-[10px] text-slate-400'>
+                          <span>{doc.views.toLocaleString('vi-VN')} lượt xem</span>
+                          <span>•</span>
+                          <span>{doc.downloads.toLocaleString('vi-VN')} lượt tải</span>
+                        </div>
+                      </div>
                     </div>
+                  </article>
+                ))}
+          </div>{/* end card grid */}
+
+          {/* Pagination bar */}
+          {!isLoading && !error && documents.length > 0 && (
+            <div className='mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'>
+              <div className='flex items-center justify-between gap-3 px-4 py-3'>
+                <p className='text-sm text-slate-500'>
+                  Hiển thị{' '}
+                  <span className='font-semibold text-slate-700'>
+                    {(currentPage - 1) * DOCUMENTS_PER_PAGE + 1}–{Math.min(currentPage * DOCUMENTS_PER_PAGE, totalDocuments)}
+                  </span>{' '}
+                  trong{' '}
+                  <span className='font-semibold text-slate-700'>{totalDocuments}</span> tài liệu
+                </p>
+                <div className='flex items-center gap-1.5'>
+                  <button
+                    type='button'
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className='flex h-9 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40'
+                  >
+                    <svg className='h-4 w-4' fill='none' stroke='currentColor' strokeWidth={2.5} viewBox='0 0 24 24'>
+                      <path strokeLinecap='round' strokeLinejoin='round' d='M15.75 19.5L8.25 12l7.5-7.5' />
+                    </svg>
+                    Trước
+                  </button>
+                  {paginationItems.map((item, idx) =>
+                    item === '...' ? (
+                      <span key={`e-${idx}`} className='flex h-9 w-9 items-center justify-center text-sm font-bold text-slate-400'>···</span>
+                    ) : (
+                      <button
+                        key={item}
+                        type='button'
+                        onClick={() => setCurrentPage(item)}
+                        aria-current={currentPage === item ? 'page' : undefined}
+                        className={`h-9 min-w-[36px] rounded-xl px-3 text-sm font-bold transition ${
+                          currentPage === item
+                            ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-[0_4px_12px_rgba(37,99,235,0.35)]'
+                            : 'border border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700'
+                        }`}
+                      >
+                        {item}
+                      </button>
+                    )
                   )}
-
-                  <div className='documents-card-footer'>
-                    <div className='documents-card-actions mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center'>
-                      <button
-                        type='button'
-                        onClick={() => handleDownload(doc.id, doc.fileName || `${doc.title}.${doc.type.toLowerCase()}`)}
-                        className='inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 sm:h-auto sm:w-auto sm:justify-start sm:py-1.5 sm:text-xs'
-                      >
-                        <span>↓</span>
-                        <span>Tải xuống</span>
-                      </button>
-                      <button
-                        type='button'
-                        onClick={() => void handlePreviewOpen(doc)}
-                        className='inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:h-auto sm:w-auto sm:justify-start sm:py-1.5 sm:text-xs'
-                      >
-                        <span>◉</span>
-                        <span>Xem trước</span>
-                      </button>
-                    </div>
-
-                    <div className='mt-2 flex flex-wrap gap-2 text-[13px] text-slate-500 sm:text-xs'>
-                      <span>{doc.views.toLocaleString('vi-VN')} lượt xem</span>
-                      <span>•</span>
-                      <span>{doc.downloads.toLocaleString('vi-VN')} lượt tải</span>
-                    </div>
-                  </div>
+                  <button
+                    type='button'
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className='flex h-9 items-center gap-1 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 text-sm font-semibold text-white shadow-[0_4px_12px_rgba(37,99,235,0.3)] transition hover:from-blue-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-40'
+                  >
+                    Xem thêm
+                    <svg className='h-4 w-4' fill='none' stroke='currentColor' strokeWidth={2.5} viewBox='0 0 24 24'>
+                      <path strokeLinecap='round' strokeLinejoin='round' d='M8.25 4.5l7.5 7.5-7.5 7.5' />
+                    </svg>
+                  </button>
                 </div>
               </div>
-            </article>
-          ))}
+              <div className='h-1 w-full bg-slate-100'>
+                <div
+                  className='h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-500'
+                  style={{ width: `${Math.round((currentPage / totalPages) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+        {/* ── Recommendations section ── */}
+        {!isRecsLoading && recommendedDocuments.length > 0 && (
+          <div className='mt-8'>
+            <div className='mb-3 flex items-center justify-between'>
+              <div>
+                <p className='text-[11px] font-bold uppercase tracking-[0.18em] text-blue-500'>Gợi ý cá nhân hóa</p>
+                <h2 className='text-lg font-black text-slate-800'>
+                  Gợi ý cho bạn
+                  <span className='ml-2 text-sm font-semibold text-slate-400'>{recommendedDocuments.length} tài liệu</span>
+                </h2>
+              </div>
+              {recommendedDocuments.length > 12 && (
+                <button
+                  type='button'
+                  onClick={() => setShowAllRecs((v) => !v)}
+                  className='text-sm font-semibold text-blue-600 hover:underline'
+                >
+                  {showAllRecs ? 'Thu gọn' : 'Xem tất cả'}
+                </button>
+              )}
+            </div>
+
+            <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4'>
+              {(showAllRecs ? recommendedDocuments : recommendedDocuments.slice(0, 12)).map((doc) => (
+                <article
+                  key={`recommended-${doc.id}`}
+                  className='group relative flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md'
+                >
+                  {/* Cover */}
+                  <div className={`relative h-[72px] w-full overflow-hidden ${typeClassMap[doc.type]}`}>
+                    <span className='absolute -right-2 -top-2 select-none text-[64px] opacity-10'>{typeIconMap[doc.type]}</span>
+                    <span className='absolute -bottom-4 -left-4 h-14 w-14 rounded-full bg-white/10' />
+                    <span className='absolute left-3 top-3 rounded-lg bg-white/25 px-2 py-0.5 text-[10px] font-extrabold text-white backdrop-blur-sm'>{doc.type}</span>
+                  </div>
+                  {/* Body */}
+                  <div className='flex flex-1 flex-col p-3'>
+                    <h3 className='line-clamp-2 text-sm font-bold leading-tight text-slate-800'>{doc.title}</h3>
+                    <p className='mt-1 truncate text-[11px] text-slate-500'>{doc.subject ? `Môn: ${doc.subject}` : 'Môn: Chưa cập nhật'}</p>
+                    <p className='truncate text-[11px] font-semibold text-blue-600'>{doc.major || ''}</p>
+                    <p className='truncate text-[11px] text-slate-400'>{doc.school || ''}</p>
+                    <div className='mt-auto pt-3'>
+                      <div className='flex gap-1'>
+                        <span className='text-[10px] text-slate-400'>{doc.views} xem</span>
+                        <span className='text-[10px] text-slate-300'>•</span>
+                        <span className='text-[10px] text-slate-400'>{doc.downloads} tải</span>
+                      </div>
+                      <button
+                        type='button'
+                        onClick={() => handlePreviewOpen(doc)}
+                        className='mt-1.5 w-full rounded-lg border border-blue-200 bg-blue-50 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100'
+                      >
+                        Xem trước
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            {!showAllRecs && recommendedDocuments.length > 12 && (
+              <div className='mt-4 flex justify-center'>
+                <button
+                  type='button'
+                  onClick={() => setShowAllRecs(true)}
+                  className='flex items-center gap-2 rounded-xl border border-blue-200 bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-[0_4px_14px_rgba(37,99,235,0.3)] transition hover:from-blue-500 hover:to-indigo-500'
+                >
+                  Xem thêm gợi ý
+                  <svg className='h-4 w-4' fill='none' stroke='currentColor' strokeWidth={2.5} viewBox='0 0 24 24'>
+                    <path strokeLinecap='round' strokeLinejoin='round' d='M8.25 4.5l7.5 7.5-7.5 7.5' />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {isRecsLoading && (
+          <div className='mt-8'>
+            <div className='mb-3'>
+              <p className='text-[11px] font-bold uppercase tracking-[0.18em] text-blue-500'>Gợi ý cá nhân hóa</p>
+              <h2 className='text-lg font-black text-slate-800'>Gợi ý cho bạn</h2>
+            </div>
+            <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4'>
+              {[1,2,3,4,5,6,7,8].map((n) => (
+                <div key={n} className='animate-pulse overflow-hidden rounded-2xl border border-slate-200 bg-white'>
+                  <div className='h-[72px] bg-slate-200' />
+                  <div className='space-y-2 p-3'>
+                    <div className='h-3 w-3/4 rounded bg-slate-200' />
+                    <div className='h-2.5 w-1/2 rounded bg-slate-100' />
+                    <div className='h-7 rounded-lg bg-slate-100' />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         </div>
       </section>
 
@@ -1097,9 +1260,8 @@ export default function DocumentsPage() {
                 key={targetUser.id}
                 type='button'
                 onClick={() => setShareUserId(targetUser.id)}
-                className={`flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition ${
-                  shareUserId === targetUser.id ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-white'
-                }`}
+                className={`flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition ${shareUserId === targetUser.id ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-white'
+                  }`}
               >
                 <Avatar src={targetUser.avatar} name={targetUser.displayName || 'Người dùng'} size='sm' />
                 <div className='min-w-0'>
@@ -1238,7 +1400,8 @@ export default function DocumentsPage() {
                 className='h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-300'
                 placeholder='VD: Đề cương CSDL cuối kỳ'
               />
-            </label>
+            </label>
+
             {renderUploadSuggestInput({ field: 'subject', label: 'Môn học', placeholder: 'Cơ sở dữ liệu' })}
             {renderUploadSuggestInput({ field: 'major', label: 'Ngành', placeholder: 'CNTT' })}
             {renderUploadSuggestInput({ field: 'school', label: 'Trường', placeholder: 'ĐH Bách Khoa' })}
@@ -1315,19 +1478,19 @@ export default function DocumentsPage() {
             <div className='rounded-xl border border-slate-200 bg-slate-50 p-2'>
               {previewDoc.type === 'PDF' ? (
                 previewLoading ? (
-                <div className='grid h-[62vh] place-items-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-500'>
-                  Đang tải bản xem trước...
-                </div>
+                  <div className='grid h-[62vh] place-items-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-500'>
+                    Đang tải bản xem trước...
+                  </div>
                 ) : previewError ? (
-                <div className='grid h-[62vh] place-items-center rounded-lg border border-rose-200 bg-rose-50 px-4 text-center text-sm font-medium text-rose-700'>
-                  {previewError}
-                </div>
+                  <div className='grid h-[62vh] place-items-center rounded-lg border border-rose-200 bg-rose-50 px-4 text-center text-sm font-medium text-rose-700'>
+                    {previewError}
+                  </div>
                 ) : (
-                <iframe
-                  title='document-preview'
-                  src={previewUrl}
-                  className='h-[62vh] w-full rounded-lg border border-slate-200 bg-white'
-                />
+                  <iframe
+                    title='document-preview'
+                    src={previewUrl}
+                    className='h-[62vh] w-full rounded-lg border border-slate-200 bg-white'
+                  />
                 )
               ) : (
                 <div className='grid h-[62vh] place-items-center rounded-lg border border-amber-200 bg-amber-50 px-4 text-center text-sm font-medium text-amber-800'>

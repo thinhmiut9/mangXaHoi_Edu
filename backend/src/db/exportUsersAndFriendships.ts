@@ -6,7 +6,7 @@ interface UserExportRow {
   userId: string
   email: string
   displayName: string
-  bio?: string | null
+  interests?: string | null
   avatarUrl?: string | null
   coverUrl?: string | null
   location?: string | null
@@ -70,7 +70,7 @@ async function exportUsers(dataDir: string) {
       u.userId AS userId,
       u.email AS email,
       u.displayName AS displayName,
-      u.bio AS bio,
+      coalesce(u.interests, u.bio) AS interests,
       u.avatarUrl AS avatarUrl,
       u.coverUrl AS coverUrl,
       u.location AS location,
@@ -92,7 +92,7 @@ async function exportUsers(dataDir: string) {
     'userId',
     'email',
     'displayName',
-    'bio',
+    'interests',
     'avatarUrl',
     'coverUrl',
     'location',

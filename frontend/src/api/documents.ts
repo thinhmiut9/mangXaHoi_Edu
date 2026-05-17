@@ -39,6 +39,12 @@ export interface ListDocumentsQuery {
   limit?: number
 }
 
+export interface DocumentFacets {
+  schools: string[]
+  majors: string[]
+  cohorts: string[]
+}
+
 export interface CreateDocumentPayload {
   file: File
   title?: string
@@ -133,6 +139,11 @@ export const documentsApi = {
     }
   },
 
+  getFacets: async () => {
+    const response = await apiClient.get<ApiResponse<DocumentFacets>>('/documents/facets')
+    return response.data.data ?? { schools: [], majors: [], cohorts: [] }
+  },
+
   listSaved: async (page = 1, limit = 20) => {
     const response = await apiClient.get<ApiResponse<any[]>>('/documents/saved', { params: { page, limit } })
     return {
@@ -166,4 +177,18 @@ export const documentsApi = {
     })
     return normalizeDocument(response.data.data)
   },
+
+  getRecommendations: async (limit = 10): Promise<RecommendedDocument[]> => {
+    const response = await apiClient.get<ApiResponse<any[]>>('/documents/recommendations', {
+      params: { limit },
+    })
+    return (response.data.data ?? []).map((raw) => ({
+      ...normalizeDocument(raw),
+      similarityScore: typeof raw.similarityScore === 'number' ? raw.similarityScore : 0,
+    }))
+  },
+}
+
+export interface RecommendedDocument extends LearningDocument {
+  similarityScore: number
 }

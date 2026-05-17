@@ -292,7 +292,7 @@ export default function SearchPage() {
                                 {user.displayName}
                               </Link>
                               <p className="truncate text-sm text-slate-500">{user.email}</p>
-                              <p className="mt-1 line-clamp-2 text-sm text-slate-600">{user.bio || `@${user.username}`}</p>
+                              <p className="mt-1 line-clamp-2 text-sm text-slate-600">{user.interests || `@${user.username}`}</p>
                             </div>
                           </div>
 
@@ -456,7 +456,7 @@ export default function SearchPage() {
                     <Avatar src={user.avatar} name={user.displayName} size="sm" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-slate-800">{user.displayName}</p>
-                      <p className="truncate text-xs text-slate-500">{user.bio || user.username}</p>
+                      <p className="truncate text-xs text-slate-500">{user.interests || user.username}</p>
                     </div>
                     <Button
                       size="sm"

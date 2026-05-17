@@ -80,7 +80,7 @@ export function RightPanel() {
                     {user.displayName}
                   </Link>
                   <p className='text-[11px] text-slate-400 truncate mt-0.5'>
-                    {user.bio?.trim() || `@${user.username}`}
+                    {user.interests?.trim() || `@${user.username}`}
                   </p>
                 </div>
 
